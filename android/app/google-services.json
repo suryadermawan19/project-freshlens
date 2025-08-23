@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "211287780020",
+    "project_id": "freshlens-1caf5",
+    "storage_bucket": "freshlens-1caf5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:211287780020:android:b9b45bea72567f23f9c5e1",
+        "android_client_info": {
+          "package_name": "com.example.freshlens_ai_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "211287780020-ra58191ulhgeg3thm4fa4ja7rva3qamb.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAd4buEEQpwgCGd7tkLgcOWuhcq4GAcKFk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "211287780020-ra58191ulhgeg3thm4fa4ja7rva3qamb.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "211287780020-04d43lvfircl98g0fns411r6jeefd20j.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.freshlensAiApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
