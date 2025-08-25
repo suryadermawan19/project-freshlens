@@ -5,12 +5,14 @@ class Batch {
   final DateTime entryDate;
   final int quantity;
   final int predictedShelfLife;
+  final String initialCondition; // <-- TAMBAHAN BARU
 
   Batch({
     required this.id,
     required this.entryDate,
     required this.quantity,
     required this.predictedShelfLife,
+    required this.initialCondition, // <-- TAMBAHAN BARU
   });
 }
 

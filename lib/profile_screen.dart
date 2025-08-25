@@ -3,8 +3,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:freshlens_ai_app/edit_profile_screen.dart';
 import 'package:freshlens_ai_app/login_screen.dart';
 import 'package:freshlens_ai_app/service/firestore_service.dart';
+import 'package:freshlens_ai_app/settings_screen.dart';
+import 'package:image_picker/image_picker.dart'; // <-- 1. IMPORT IMAGE_PICKER
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -16,6 +19,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  bool _isUploading = false; // State untuk loading indicator
 
   Future<void> _signOut() async {
     await _auth.signOut();
@@ -27,6 +31,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
   }
+
+  // --- 2. FUNGSI BARU UNTUK MEMILIH DAN MENGUNGGAH GAMBAR ---
+  Future<void> _pickAndUploadImage(ImageSource source) async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: source, imageQuality: 50);
+
+    if (pickedFile != null) {
+      setState(() => _isUploading = true);
+      try {
+        await _firestoreService.uploadProfileImage(pickedFile.path);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Foto profil berhasil diperbarui!'), backgroundColor: Colors.green),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Gagal mengunggah foto: $e'), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isUploading = false);
+        }
+      }
+    }
+  }
+
+  // --- 3. FUNGSI BARU UNTUK MENAMPILKAN PILIHAN SUMBER GAMBAR ---
+  void _showImageSourceActionSheet() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: <Widget>[
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Pilih dari Galeri'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _pickAndUploadImage(ImageSource.gallery);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera),
+              title: const Text('Ambil Foto dari Kamera'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _pickAndUploadImage(ImageSource.camera);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +110,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           return Stack(
             children: [
+              // (Background tidak berubah)
               Positioned(
                 top: -size.height * 0.2,
                 left: -size.width * 0.1,
@@ -60,7 +123,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ),
-
               SafeArea(
                 child: SingleChildScrollView(
                   child: Column(
@@ -68,24 +130,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 16),
                       const Text("Profil", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 16),
-                      CircleAvatar(
-                        radius: 50,
-                        backgroundImage: userData['profileImageUrl'] != null
-                            ? NetworkImage(userData['profileImageUrl'])
-                            : null,
-                        child: userData['profileImageUrl'] == null
-                            ? Text(
-                                userData['name']?.substring(0, 1).toUpperCase() ?? 'A',
-                                style: const TextStyle(fontSize: 40),
-                              )
-                            : null,
+                      // --- 4. BUAT FOTO PROFIL BISA DITEKAN ---
+                      Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: 50,
+                            backgroundImage: userData['profileImageUrl'] != null
+                                ? NetworkImage(userData['profileImageUrl'])
+                                : null,
+                            child: userData['profileImageUrl'] == null
+                                ? Text(
+                                    userData['name']?.substring(0, 1).toUpperCase() ?? 'A',
+                                    style: const TextStyle(fontSize: 40),
+                                  )
+                                : null,
+                          ),
+                          // Tampilkan loading indicator di atas foto saat mengunggah
+                          if (_isUploading)
+                            const Positioned.fill(
+                              child: CircularProgressIndicator(color: Colors.white),
+                            ),
+                          // Tombol tak terlihat untuk aksi tap
+                          Positioned.fill(
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _isUploading ? null : _showImageSourceActionSheet,
+                                borderRadius: BorderRadius.circular(50),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 16),
                       Text(userData['name'] ?? 'Nama Pengguna', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
                       Text(userData['email'] ?? 'email@pengguna.com', style: TextStyle(fontSize: 16, color: Colors.grey[700])),
                       const SizedBox(height: 40),
-
+                      // (Sisa UI tidak berubah)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20.0),
                         child: Column(
@@ -101,18 +183,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ],
                             ),
                             const SizedBox(height: 24),
-
                             const Text("Pengaturan Akun", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 16),
-                            _buildMenuButton(icon: Icons.person_outline, text: "Edit Profil"),
-                            _buildMenuButton(icon: Icons.settings_outlined, text: "Pengaturan"),
-                            _buildMenuButton(icon: Icons.devices_other_outlined, text: "Kelola Perangkat Box"),
-                            _buildMenuButton(icon: Icons.workspace_premium_outlined, text: "Langganan"),
+                            _buildMenuButton(
+                              icon: Icons.person_outline, 
+                              text: "Edit Profil",
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const EditProfileScreen()),
+                                );
+                              }
+                            ),
+                            _buildMenuButton(
+                              icon: Icons.settings_outlined, 
+                              text: "Pengaturan", 
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                                );
+                              }
+                            ),
+                            _buildMenuButton(icon: Icons.devices_other_outlined, text: "Kelola Perangkat Box", onTap: () {}),
+                            _buildMenuButton(icon: Icons.workspace_premium_outlined, text: "Langganan", onTap: () {}),
                             const SizedBox(height: 24),
-
                             const Text("Bantuan dan Dukungan", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 16),
-                            _buildMenuButton(icon: Icons.help_outline, text: "Pusat Bantuan (FAQ)"),
+                            _buildMenuButton(icon: Icons.help_outline, text: "Pusat Bantuan (FAQ)", onTap: () {}),
                             const SizedBox(height: 12),
                             ElevatedButton(
                               onPressed: _signOut,
@@ -145,6 +243,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // (Sisa widget helper tidak berubah)
   Widget _buildStatCard(String title, String value, String unit) {
     return Card(
       elevation: 2,
@@ -156,7 +255,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Text(title, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
             const SizedBox(height: 8),
-            // PERBAIKAN DI SINI
             Text('$value $unit', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           ],
         ),
@@ -164,9 +262,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildMenuButton({required IconData icon, required String text}) {
+  Widget _buildMenuButton({required IconData icon, required String text, required VoidCallback onTap}) {
     return ElevatedButton(
-      onPressed: () {},
+      onPressed: onTap,
       style: ElevatedButton.styleFrom(
         foregroundColor: Colors.black87,
         backgroundColor: Colors.white,
@@ -179,6 +277,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Icon(icon, color: Colors.grey[700]),
           const SizedBox(width: 16),
           Text(text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          const Spacer(),
+          const Icon(Icons.chevron_right),
         ],
       ),
     );

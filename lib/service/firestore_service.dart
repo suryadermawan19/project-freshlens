@@ -4,26 +4,25 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:freshlens_ai_app/models/inventory_item_model.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
-  /// Mendapatkan UID pengguna yang sedang login.
-  /// Akan throw exception jika tidak ada pengguna yang login.
-  String get _uid {
+  User get _currentUser {
     final user = _auth.currentUser;
     if (user == null) {
       throw Exception("Pengguna belum login.");
     }
-    return user.uid;
+    return user;
   }
+
+  String get _uid => _currentUser.uid;
 
   // --- FUNGSI PROFIL PENGGUNA ---
 
-  /// Membuat dokumen profil untuk pengguna baru.
-  /// Ini akan dipanggil setelah registrasi dan pengisian biodata.
   Future<void> createUserProfile({
     required String name,
     required int age,
@@ -33,23 +32,60 @@ class FirestoreService {
       'name': name,
       'age': age,
       'occupation': occupation,
-      'email': _auth.currentUser?.email, // Simpan email untuk referensi
-      'profileImageUrl': null, // Akan diisi nanti jika ada fitur upload foto profil
+      'email': _currentUser.email,
+      'profileImageUrl': null,
       'createdAt': FieldValue.serverTimestamp(),
-      // Inisialisasi data statistik
       'savedFoodCount': 0,
       'moneySaved': 0.0,
     });
   }
 
-  /// Mengambil data profil pengguna secara real-time.
   Stream<DocumentSnapshot> getUserProfile() {
     return _db.collection('users').doc(_uid).snapshots();
   }
 
+  Future<void> updateUserProfile(Map<String, dynamic> data) async {
+    await _db.collection('users').doc(_uid).update(data);
+  }
+
+  // --- FUNGSI BARU UNTUK UPLOAD FOTO PROFIL ---
+  /// Mengunggah gambar profil ke Firebase Storage dan memperbarui URL di profil pengguna.
+  Future<void> uploadProfileImage(String imagePath) async {
+    final file = File(imagePath);
+    // Buat referensi unik untuk setiap pengguna. Ini akan menimpa gambar lama jika ada.
+    final ref = _storage.ref().child('profile_images').child('$_uid.jpg');
+
+    // Unggah file
+    final uploadTask = await ref.putFile(file);
+    
+    // Dapatkan URL unduhan
+    final imageUrl = await uploadTask.ref.getDownloadURL();
+
+    // Simpan URL ke profil pengguna
+    await updateUserProfile({'profileImageUrl': imageUrl});
+  }
+
+  // --- FUNGSI AKUN & KEAMANAN ---
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final cred = EmailAuthProvider.credential(
+      email: _currentUser.email!,
+      password: currentPassword,
+    );
+    await _currentUser.reauthenticateWithCredential(cred);
+    await _currentUser.updatePassword(newPassword);
+  }
+
+  Future<void> deleteUserAccount() async {
+    await _db.collection('users').doc(_uid).delete();
+    await _currentUser.delete();
+  }
+
   // --- FUNGSI MANAJEMEN INVENTARIS ---
 
-  /// Mengambil stream daftar item inventaris milik pengguna saat ini.
   Stream<QuerySnapshot> getInventoryItems() {
     return _db
         .collection('users')
@@ -59,7 +95,6 @@ class FirestoreService {
         .snapshots();
   }
 
-  /// Fungsi untuk menambahkan item baru ke Firestore dan mengupload gambarnya.
   Future<void> addItem({
     required String itemName,
     required int quantity,
@@ -86,13 +121,26 @@ class FirestoreService {
 
     await _db.collection('users').doc(_uid).collection('items').add(itemData);
   }
+  
+  Future<void> markAsUsed(Batch batch) async {
+    final userDocRef = _db.collection('users').doc(_uid);
+    final itemDocRef = _db.collection('users').doc(_uid).collection('items').doc(batch.id);
+    final double estimatedPricePerItem = 2500.0;
+    final double moneySaved = batch.quantity * estimatedPricePerItem;
 
-  /// Menghapus item berdasarkan document ID-nya.
+    return _db.runTransaction((transaction) async {
+      transaction.update(userDocRef, {
+        'savedFoodCount': FieldValue.increment(batch.quantity),
+        'moneySaved': FieldValue.increment(moneySaved),
+      });
+      transaction.delete(itemDocRef);
+    });
+  }
+
   Future<void> deleteItem(String itemId) async {
     await _db.collection('users').doc(_uid).collection('items').doc(itemId).delete();
   }
 
-  /// Memperbarui data item yang sudah ada.
   Future<void> updateItem(String itemId, Map<String, dynamic> data) async {
     await _db.collection('users').doc(_uid).collection('items').doc(itemId).update(data);
   }

@@ -126,16 +126,13 @@ class _DashboardContentState extends State<DashboardContent> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. HEADER SEKARANG MENGGUNAKAN STREAMBUILDER-NYA SENDIRI
               StreamBuilder<DocumentSnapshot>(
                 stream: _firestoreService.getUserProfile(),
                 builder: (context, snapshot) {
-                  // Tampilkan placeholder saat loading atau jika tidak ada data
                   if (!snapshot.hasData) {
                     return _buildHeader(name: 'Pengguna', imageUrl: null);
                   }
                   final userData = snapshot.data!.data() as Map<String, dynamic>;
-                  // Tampilkan data asli jika sudah tersedia
                   return _buildHeader(
                     name: userData['name'] ?? 'Pengguna',
                     imageUrl: userData['profileImageUrl'],
@@ -159,7 +156,6 @@ class _DashboardContentState extends State<DashboardContent> {
                 },
               ),
               
-              // StreamBuilder untuk inventaris (tidak berubah)
               StreamBuilder<QuerySnapshot>(
                 stream: _firestoreService.getInventoryItems(),
                 builder: (context, snapshot) {
@@ -194,9 +190,7 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  // 2. WIDGET HEADER DIPISAHKAN UNTUK KEBERSIHAN KODE
   Widget _buildHeader({required String name, required String? imageUrl}) {
-    // Memotong nama jika terlalu panjang, ambil kata pertama saja
     final displayName = name.split(' ').first;
 
     return Row(
@@ -244,7 +238,6 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  // Sisa kode di bawah ini tidak ada perubahan signifikan
   Widget _buildSearchResults(List<DocumentSnapshot> results) {
      if (results.isEmpty) {
       return const Padding(
@@ -273,7 +266,6 @@ class _DashboardContentState extends State<DashboardContent> {
   }
 
   Widget _buildDashboardContent(List<DocumentSnapshot> allItems) {
-    // TODO: Ganti logika 'predictedShelfLife' dengan data asli nanti
     final urgentItems = allItems.where((doc) {
       final data = doc.data() as Map<String, dynamic>;
       return (data['predictedShelfLife'] ?? 10) < 5;
@@ -427,7 +419,6 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
   
-  // Fungsi helper untuk mengelompokkan data (sama seperti di inventory_screen)
   List<InventoryItemGroup> _groupItems(List<DocumentSnapshot> allItems) {
     final Map<String, List<DocumentSnapshot>> groupedItems = {};
     for (var doc in allItems) {
@@ -443,7 +434,7 @@ class _DashboardContentState extends State<DashboardContent> {
       final itemName = entry.key;
       final batchesData = entry.value;
       final firstItemData = batchesData.first.data() as Map<String, dynamic>;
-      final imagePath = firstItemData['imageUrl'] ?? 'assets/images/tomato.png';
+      final imagePath = firstItemData['imageUrl'] ?? 'assets/images/placeholder.png';
 
       final batches = batchesData.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
@@ -451,7 +442,9 @@ class _DashboardContentState extends State<DashboardContent> {
           id: doc.id,
           entryDate: (data['entryDate'] as Timestamp? ?? Timestamp.now()).toDate(),
           quantity: data['quantity'] ?? 0,
-          predictedShelfLife: 7, // Placeholder
+          predictedShelfLife: data['predictedShelfLife'] ?? 7,
+          // PERBAIKAN DI SINI
+          initialCondition: data['initialCondition'] ?? 'Tidak diketahui',
         );
       }).toList();
 

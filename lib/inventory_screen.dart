@@ -17,14 +17,12 @@ class InventoryScreen extends StatefulWidget {
 class _InventoryScreenState extends State<InventoryScreen> {
   final FirestoreService _firestoreService = FirestoreService();
 
-  // Helper function untuk menentukan status berdasarkan sisa hari
   String _getStatusForDays(int days) {
     if (days <= 2) return 'Kritis';
     if (days <= 4) return 'Segera Olah';
     return 'Segar';
   }
   
-  // Helper function untuk mendapatkan nilai prioritas dari status
   int _getPriorityForStatus(String status) {
     switch (status) {
       case 'Kritis':
@@ -70,7 +68,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
           final itemDocs = snapshot.data!.docs;
 
-          // Mengelompokkan item berdasarkan nama
           final Map<String, List<DocumentSnapshot>> groupedItems = {};
           for (var doc in itemDocs) {
             final data = doc.data() as Map<String, dynamic>;
@@ -81,7 +78,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
             groupedItems[itemName]!.add(doc);
           }
 
-          // Ubah map menjadi list dari InventoryItemGroup
           final List<InventoryItemGroup> allItemGroups = groupedItems.entries.map((entry) {
             final itemName = entry.key;
             final batchesData = entry.value;
@@ -94,7 +90,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 id: doc.id,
                 entryDate: (data['entryDate'] as Timestamp? ?? Timestamp.now()).toDate(),
                 quantity: data['quantity'] ?? 0,
-                predictedShelfLife: data['predictedShelfLife'] ?? 7, // Ambil dari data, fallback ke 7
+                predictedShelfLife: data['predictedShelfLife'] ?? 7,
+                initialCondition: data['initialCondition'] ?? 'Tidak diketahui', // <-- PERUBAHAN DI SINI
               );
             }).toList();
 
@@ -105,7 +102,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
             );
           }).toList();
 
-          // Lakukan sorting berdasarkan prioritas
           allItemGroups.sort((a, b) {
             final shortestDaysA = a.batches.map((batch) => batch.predictedShelfLife).reduce((val, el) => val < el ? val : el);
             final shortestDaysB = b.batches.map((batch) => batch.predictedShelfLife).reduce((val, el) => val < el ? val : el);

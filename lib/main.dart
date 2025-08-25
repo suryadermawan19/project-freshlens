@@ -1,18 +1,23 @@
 // lib/main.dart
 
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart'; // <-- Import Firebase Core
-import 'firebase_options.dart'; // <-- Import file yang digenerate FlutterFire
+import 'package:firebase_core/firebase_core.dart';
+import 'package:freshlens_ai_app/theme_provider.dart';
+import 'package:provider/provider.dart';
+import 'firebase_options.dart';
 import 'login_screen.dart';
 
-
-// Ubah 'main' menjadi async
 Future<void> main() async {
-  // Pastikan semua plugin terinisialisasi sebelum menjalankan aplikasi
   WidgetsFlutterBinding.ensureInitialized();
-  // Inisialisasi Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const FreshLensApp());
+  
+  // Bungkus aplikasi dengan ThemeProvider
+  runApp(
+    ChangeNotifierProvider(
+      create: (context) => ThemeProvider(),
+      child: const FreshLensApp(),
+    ),
+  );
 }
 
 class FreshLensApp extends StatelessWidget {
@@ -20,11 +25,30 @@ class FreshLensApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'FreshLens AI',
-      theme: ThemeData(primarySwatch: Colors.green, fontFamily: 'Poppins'),
-      home: const LoginScreen(),
+    // Gunakan Consumer untuk mendapatkan state tema saat ini
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'FreshLens AI',
+          // Tentukan tema terang dan gelap
+          theme: ThemeData(
+            primarySwatch: Colors.green,
+            fontFamily: 'Poppins',
+            brightness: Brightness.light,
+            scaffoldBackgroundColor: const Color(0xFFFAF8F1),
+          ),
+          darkTheme: ThemeData(
+            primarySwatch: Colors.green,
+            fontFamily: 'Poppins',
+            brightness: Brightness.dark,
+            // Anda bisa menyesuaikan warna dark mode di sini
+          ),
+          // Atur themeMode dari provider
+          themeMode: themeProvider.themeMode,
+          home: const LoginScreen(),
+        );
+      },
     );
   }
 }
