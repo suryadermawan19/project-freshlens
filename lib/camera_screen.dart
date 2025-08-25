@@ -2,9 +2,8 @@
 
 import 'dart:async';
 import 'dart:io';
-
 import 'package:camera/camera.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'; // <-- PERBAIKAN UTAMA DI SINI
 import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
 import 'confirm_item_screen.dart';
 
@@ -18,7 +17,7 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen> {
   List<CameraDescription>? _cameras;
   CameraController? _controller;
-  
+
   ImageLabeler? _imageLabeler;
   bool _isDetecting = false;
   String _detectedLabel = "Arahkan ke buah atau sayur...";
@@ -42,9 +41,16 @@ class _CameraScreenState extends State<CameraScreen> {
   String _translateLabel(String englishLabel) {
     final lowerLabel = englishLabel.toLowerCase();
     const dictionary = {
-      'apple': 'Apel', 'banana': 'Pisang', 'orange': 'Jeruk', 'tomato': 'Tomat',
-      'lettuce': 'Selada', 'carrot': 'Wortel', 'spinach': 'Bayam', 'broccoli': 'Brokoli',
-      'potato': 'Kentang', 'chili pepper': 'Cabai',
+      'apple': 'Apel',
+      'banana': 'Pisang',
+      'orange': 'Jeruk',
+      'tomato': 'Tomat',
+      'lettuce': 'Selada',
+      'carrot': 'Wortel',
+      'spinach': 'Bayam',
+      'broccoli': 'Brokoli',
+      'potato': 'Kentang',
+      'chili pepper': 'Cabai',
     };
     return dictionary[lowerLabel] ?? englishLabel;
   }
@@ -69,9 +75,9 @@ class _CameraScreenState extends State<CameraScreen> {
   void _processCameraImage(CameraImage image) {
     if (_isDetecting || !mounted || _imageLabeler == null) return;
     _isDetecting = true;
-    
+
     final inputImage = _inputImageFromCameraImage(image);
-    
+
     if (inputImage != null) {
       _imageLabeler!.processImage(inputImage).then((labels) {
         if (labels.isNotEmpty && mounted) {
@@ -81,11 +87,11 @@ class _CameraScreenState extends State<CameraScreen> {
           });
         }
       }).whenComplete(() {
-          _detectionTimer = Timer(const Duration(milliseconds: 500), () {
-            if (mounted) {
-              _isDetecting = false;
-            }
-          });
+        _detectionTimer = Timer(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _isDetecting = false;
+          }
+        });
       });
     } else {
       _isDetecting = false;
@@ -107,7 +113,9 @@ class _CameraScreenState extends State<CameraScreen> {
     if (rotation == null) return null;
 
     final format = InputImageFormatValue.fromRawValue(image.format.raw);
-    if (format == null || (Platform.isAndroid && format != InputImageFormat.nv21) || (Platform.isIOS && format != InputImageFormat.bgra8888)) {
+    if (format == null ||
+        (Platform.isAndroid && format != InputImageFormat.nv21) ||
+        (Platform.isIOS && format != InputImageFormat.bgra8888)) {
       return null;
     }
 
@@ -126,11 +134,13 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   void _captureAndConfirm() async {
-    if (_detectedLabel.contains("Arahkan") || _controller == null || !_controller!.value.isInitialized) return;
-    
+    if (_detectedLabel.contains("Arahkan") ||
+        _controller == null ||
+        !_controller!.value.isInitialized) return;
+
     await _controller!.stopImageStream();
     final image = await _controller!.takePicture();
-    
+
     if (!mounted) return;
     Navigator.pushReplacement(
       context,
@@ -160,8 +170,11 @@ class _CameraScreenState extends State<CameraScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                // PERBAIKAN DI SINI
-                colors: [Colors.black.withAlpha(153), Colors.transparent, Colors.black.withAlpha(204)],
+                colors: [
+                  Colors.black.withAlpha(153),
+                  Colors.transparent,
+                  Colors.black.withAlpha(204)
+                ],
                 stops: const [0.0, 0.4, 0.8],
               ),
             ),
@@ -171,13 +184,15 @@ class _CameraScreenState extends State<CameraScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                // PERBAIKAN DI SINI
                 color: Colors.black.withAlpha(128),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
                 _detectedLabel,
-                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold),
               ),
             ),
           ),

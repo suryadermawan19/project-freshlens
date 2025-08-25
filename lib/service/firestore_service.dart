@@ -22,7 +22,7 @@ class FirestoreService {
   String get _uid => _currentUser.uid;
 
   // --- FUNGSI PROFIL PENGGUNA ---
-
+  // (Tidak ada perubahan di sini)
   Future<void> createUserProfile({
     required String name,
     required int age,
@@ -48,25 +48,16 @@ class FirestoreService {
     await _db.collection('users').doc(_uid).update(data);
   }
 
-  // --- FUNGSI BARU UNTUK UPLOAD FOTO PROFIL ---
-  /// Mengunggah gambar profil ke Firebase Storage dan memperbarui URL di profil pengguna.
   Future<void> uploadProfileImage(String imagePath) async {
     final file = File(imagePath);
-    // Buat referensi unik untuk setiap pengguna. Ini akan menimpa gambar lama jika ada.
     final ref = _storage.ref().child('profile_images').child('$_uid.jpg');
-
-    // Unggah file
     final uploadTask = await ref.putFile(file);
-    
-    // Dapatkan URL unduhan
     final imageUrl = await uploadTask.ref.getDownloadURL();
-
-    // Simpan URL ke profil pengguna
     await updateUserProfile({'profileImageUrl': imageUrl});
   }
 
   // --- FUNGSI AKUN & KEAMANAN ---
-
+  // (Tidak ada perubahan di sini)
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
@@ -84,8 +75,15 @@ class FirestoreService {
     await _currentUser.delete();
   }
 
-  // --- FUNGSI MANAJEMEN INVENTARIS ---
+  // --- FUNGSI SENSOR DATA BARU ---
+  /// Mendengarkan data sensor terbaru secara real-time dari dokumen 'latest'.
+  Stream<DocumentSnapshot> getLatestSensorData() {
+    return _db.collection('users').doc(_uid).collection('sensor_data').doc('latest').snapshots();
+  }
 
+
+  // --- FUNGSI MANAJEMEN INVENTARIS ---
+  // (Tidak ada perubahan di sini)
   Stream<QuerySnapshot> getInventoryItems() {
     return _db
         .collection('users')
