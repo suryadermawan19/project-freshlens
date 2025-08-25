@@ -1,7 +1,9 @@
 // lib/dashboard_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:freshlens_ai_app/service/firestore_service.dart';
 import 'models/inventory_item_model.dart';
 import 'item_detail_screen.dart';
 import 'sensor_card.dart';
@@ -12,6 +14,7 @@ import 'inventory_screen.dart';
 import 'profile_screen.dart';
 import 'camera_screen.dart';
 
+// --- BAGIAN INDUK (NAVIGASI) TIDAK BERUBAH ---
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
   @override
@@ -101,6 +104,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
+// --- BAGIAN KONTEN DASBOR ---
 class DashboardContent extends StatefulWidget {
   final VoidCallback onViewAllTapped;
   const DashboardContent({super.key, required this.onViewAllTapped});
@@ -110,68 +114,10 @@ class DashboardContent extends StatefulWidget {
 
 class _DashboardContentState extends State<DashboardContent> {
   final TextEditingController _searchController = TextEditingController();
-  List<InventoryItemGroup> _searchResults = [];
-
-  // Data dummy kita sekarang menggunakan model InventoryItemGroup
-  final List<InventoryItemGroup> _allItemGroups = [
-    InventoryItemGroup(
-      itemName: 'Tomat',
-      imagePath: 'assets/images/tomato.png',
-      batches: [
-        Batch(
-            id: 'tomat1',
-            entryDate: DateTime(2025, 8, 8),
-            quantity: 3,
-            predictedShelfLife: 3),
-        Batch(
-            id: 'tomat2',
-            entryDate: DateTime(2025, 8, 9),
-            quantity: 2,
-            predictedShelfLife: 4),
-      ],
-    ),
-    InventoryItemGroup(
-      itemName: 'Selada',
-      imagePath: 'assets/images/lettuce.png',
-      batches: [
-        Batch(
-            id: 'selada1',
-            entryDate: DateTime(2025, 8, 7),
-            quantity: 1,
-            predictedShelfLife: 5)
-      ],
-    ),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _searchController.addListener(_onSearchChanged);
-  }
-
-  @override
-  void dispose() {
-    _searchController.removeListener(_onSearchChanged);
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  void _onSearchChanged() {
-    final query = _searchController.text;
-    if (query.isEmpty) {
-      setState(() => _searchResults = []);
-      return;
-    }
-    final results = _allItemGroups
-        .where((group) =>
-            group.itemName.toLowerCase().contains(query.toLowerCase()))
-        .toList();
-    setState(() => _searchResults = results);
-  }
+  final FirestoreService _firestoreService = FirestoreService();
 
   @override
   Widget build(BuildContext context) {
-    final bool showSearchResults = _searchController.text.isNotEmpty;
     return Scaffold(
       backgroundColor: const Color(0xFFFAF8F1),
       body: SafeArea(
@@ -180,41 +126,21 @@ class _DashboardContentState extends State<DashboardContent> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const CircleAvatar(
-                      radius: 28,
-                      backgroundImage: AssetImage('assets/images/profile.png')),
-                  const SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Halo,\nNeira!',
-                          style: TextStyle(
-                              color: Color(0xFF3A592C),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 24,
-                              height: 1.2)),
-                      const SizedBox(height: 4),
-                      RichText(
-                        text: const TextSpan(
-                          style: TextStyle(
-                              color: Color(0xFF5D5D5D),
-                              fontSize: 14,
-                              fontFamily: 'Poppins'),
-                          children: <TextSpan>[
-                            TextSpan(text: 'Selamat Datang di '),
-                            TextSpan(
-                                text: 'FreshLens AI',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF769C3E))),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              // 1. HEADER SEKARANG MENGGUNAKAN STREAMBUILDER-NYA SENDIRI
+              StreamBuilder<DocumentSnapshot>(
+                stream: _firestoreService.getUserProfile(),
+                builder: (context, snapshot) {
+                  // Tampilkan placeholder saat loading atau jika tidak ada data
+                  if (!snapshot.hasData) {
+                    return _buildHeader(name: 'Pengguna', imageUrl: null);
+                  }
+                  final userData = snapshot.data!.data() as Map<String, dynamic>;
+                  // Tampilkan data asli jika sudah tersedia
+                  return _buildHeader(
+                    name: userData['name'] ?? 'Pengguna',
+                    imageUrl: userData['profileImageUrl'],
+                  );
+                },
               ),
               const SizedBox(height: 24),
               TextField(
@@ -228,11 +154,39 @@ class _DashboardContentState extends State<DashboardContent> {
                       borderRadius: BorderRadius.circular(20.0),
                       borderSide: BorderSide.none),
                 ),
+                onChanged: (query) {
+                  setState(() {});
+                },
               ),
-              if (showSearchResults)
-                _buildSearchResults()
-              else
-                _buildDashboardContent(),
+              
+              // StreamBuilder untuk inventaris (tidak berubah)
+              StreamBuilder<QuerySnapshot>(
+                stream: _firestoreService.getInventoryItems(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Padding(
+                      padding: EdgeInsets.only(top: 50),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return _buildEmptyDashboardContent();
+                  }
+
+                  final allItems = snapshot.data!.docs;
+
+                  if (_searchController.text.isNotEmpty) {
+                    final searchResult = allItems.where((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      final itemName = data['itemName'] as String;
+                      return itemName.toLowerCase().contains(_searchController.text.toLowerCase());
+                    }).toList();
+                    return _buildSearchResults(searchResult);
+                  }
+                  
+                  return _buildDashboardContent(allItems);
+                },
+              ),
             ],
           ),
         ),
@@ -240,32 +194,94 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  Widget _buildSearchResults() {
+  // 2. WIDGET HEADER DIPISAHKAN UNTUK KEBERSIHAN KODE
+  Widget _buildHeader({required String name, required String? imageUrl}) {
+    // Memotong nama jika terlalu panjang, ambil kata pertama saja
+    final displayName = name.split(' ').first;
+
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 28,
+          backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
+          child: imageUrl == null
+              ? Text(
+                  name.isNotEmpty ? name.substring(0, 1).toUpperCase() : 'A',
+                  style: const TextStyle(fontSize: 28),
+                )
+              : null,
+        ),
+        const SizedBox(width: 16),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Halo,\n$displayName!',
+                style: const TextStyle(
+                    color: Color(0xFF3A592C),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 24,
+                    height: 1.2)),
+            const SizedBox(height: 4),
+            RichText(
+              text: const TextSpan(
+                style: TextStyle(
+                    color: Color(0xFF5D5D5D),
+                    fontSize: 14,
+                    fontFamily: 'Poppins'),
+                children: <TextSpan>[
+                  TextSpan(text: 'Selamat Datang di '),
+                  TextSpan(
+                      text: 'FreshLens AI',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF769C3E))),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // Sisa kode di bawah ini tidak ada perubahan signifikan
+  Widget _buildSearchResults(List<DocumentSnapshot> results) {
+     if (results.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 20),
+        child: Center(child: Text('Item tidak ditemukan.')),
+      );
+    }
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: _searchResults.length,
+      itemCount: results.length,
       itemBuilder: (context, index) {
-        final itemGroup = _searchResults[index];
+        final itemDoc = results[index];
+        final itemData = itemDoc.data() as Map<String, dynamic>;
+        
         return ListTile(
-          leading:
-              CircleAvatar(backgroundImage: AssetImage(itemGroup.imagePath)),
-          title: Text(itemGroup.itemName),
-          subtitle: Text('Total: ${itemGroup.totalQuantity} buah'),
+          leading: CircleAvatar(backgroundImage: NetworkImage(itemData['imageUrl'])),
+          title: Text(itemData['itemName']),
+          subtitle: Text('Total: ${itemData['quantity']} buah'),
           onTap: () {
-            Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ItemDetailScreen(itemGroup: itemGroup),
-                ));
+            // TODO: Navigasi ke detail
           },
         );
       },
     );
   }
 
-  Widget _buildDashboardContent() {
-    final previewItems = _allItemGroups.take(3).toList();
+  Widget _buildDashboardContent(List<DocumentSnapshot> allItems) {
+    // TODO: Ganti logika 'predictedShelfLife' dengan data asli nanti
+    final urgentItems = allItems.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      return (data['predictedShelfLife'] ?? 10) < 5;
+    });
+    
+    final itemGroups = _groupItems(allItems);
+    final previewItemGroups = itemGroups.take(3);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -282,15 +298,21 @@ class _DashboardContentState extends State<DashboardContent> {
           ],
         ),
         const SizedBox(height: 16),
-        const UrgentItemCard(
-            itemIcon: FontAwesomeIcons.lemon,
-            itemName: 'Pisang',
-            daysLeft: 'Sisa 1 hari'),
-        const SizedBox(height: 12),
-        const UrgentItemCard(
-            itemIcon: FontAwesomeIcons.carrot,
-            itemName: 'Wortel',
-            daysLeft: 'Sisa 3 hari'),
+        if (urgentItems.isEmpty)
+          const Text('Tidak ada item yang perlu segera diolah. Bagus!')
+        else
+          ...urgentItems.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: UrgentItemCard(
+                itemIcon: FontAwesomeIcons.carrot,
+                itemName: data['itemName'],
+                daysLeft: 'Sisa ${data['predictedShelfLife'] ?? '?'} hari',
+              ),
+            );
+          }),
+        
         const SizedBox(height: 30),
         const Row(
           children: [
@@ -328,22 +350,116 @@ class _DashboardContentState extends State<DashboardContent> {
           ],
         ),
         const SizedBox(height: 8),
-        Column(
-          children: previewItems.map((itemGroup) {
-            return InventoryListItem(
-              itemName: itemGroup.itemName,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          ItemDetailScreen(itemGroup: itemGroup)),
-                );
-              },
-            );
-          }).toList(),
-        ),
+        ...previewItemGroups.map((itemGroup) {
+          return InventoryListItem(
+            itemName: itemGroup.itemName,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ItemDetailScreen(itemGroup: itemGroup),
+                ),
+              );
+            },
+          );
+        }),
       ],
     );
+  }
+  
+  Widget _buildEmptyDashboardContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+         const SizedBox(height: 24),
+         const Row(
+          children: [
+            Icon(Icons.wb_sunny_outlined, color: Color(0xFF4E5D49)),
+            SizedBox(width: 8),
+            Text('Segera Habiskan',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF37474F))),
+          ],
+        ),
+        const SizedBox(height: 16),
+        const Text("Semua bahan makanan Anda masih segar!"),
+        const SizedBox(height: 30),
+        const Row(
+          children: [
+            Expanded(
+                child: SensorCard(
+                    title: 'Suhu',
+                    icon: Icons.thermostat,
+                    value: '24',
+                    unit: '° C',
+                    status: 'Normal')),
+            SizedBox(width: 16),
+            Expanded(
+                child: SensorCard(
+                    title: 'Kelembapan',
+                    icon: Icons.water_drop_outlined,
+                    value: '65',
+                    unit: '%',
+                    status: 'Optimal')),
+          ],
+        ),
+        const SizedBox(height: 30),
+         Row(
+          children: [
+            const Icon(Icons.inventory_2_outlined, color: Color(0xFF4E5D49)),
+            const SizedBox(width: 8),
+            const Text('Inventaris',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF37474F))),
+            const Spacer(),
+            TextButton(
+                onPressed: widget.onViewAllTapped,
+                child: const Text('Lihat semua')),
+          ],
+        ),
+        const SizedBox(height: 16),
+        const Text("Inventaris Anda masih kosong."),
+      ],
+    );
+  }
+  
+  // Fungsi helper untuk mengelompokkan data (sama seperti di inventory_screen)
+  List<InventoryItemGroup> _groupItems(List<DocumentSnapshot> allItems) {
+    final Map<String, List<DocumentSnapshot>> groupedItems = {};
+    for (var doc in allItems) {
+      final data = doc.data() as Map<String, dynamic>;
+      final itemName = data['itemName'] as String;
+      if (groupedItems[itemName] == null) {
+        groupedItems[itemName] = [];
+      }
+      groupedItems[itemName]!.add(doc);
+    }
+
+    return groupedItems.entries.map((entry) {
+      final itemName = entry.key;
+      final batchesData = entry.value;
+      final firstItemData = batchesData.first.data() as Map<String, dynamic>;
+      final imagePath = firstItemData['imageUrl'] ?? 'assets/images/tomato.png';
+
+      final batches = batchesData.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return Batch(
+          id: doc.id,
+          entryDate: (data['entryDate'] as Timestamp? ?? Timestamp.now()).toDate(),
+          quantity: data['quantity'] ?? 0,
+          predictedShelfLife: 7, // Placeholder
+        );
+      }).toList();
+
+      return InventoryItemGroup(
+        itemName: itemName,
+        imagePath: imagePath,
+        batches: batches,
+      );
+    }).toList();
   }
 }

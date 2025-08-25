@@ -19,6 +19,18 @@ class InventoryGroupItem extends StatelessWidget {
     return 'Segar';
   }
 
+  // FUNGSI BARU UNTUK MENENTUKAN TIPE GAMBAR
+  ImageProvider _getImageProvider(String path) {
+    // Jika path adalah URL dari internet, gunakan NetworkImage
+    if (path.startsWith('http')) {
+      return NetworkImage(path);
+    }
+    // Jika tidak, anggap itu adalah aset lokal
+    else {
+      return AssetImage(path);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final criticalBatch = itemGroup.batches.reduce((a, b) => a.predictedShelfLife < b.predictedShelfLife ? a : b);
@@ -35,7 +47,26 @@ class InventoryGroupItem extends StatelessWidget {
             // Gambar di Kiri
             CircleAvatar(
               radius: 28,
-              backgroundImage: AssetImage(itemGroup.imagePath),
+              // GUNAKAN FUNGSI _getImageProvider DI SINI
+              backgroundImage: _getImageProvider(itemGroup.imagePath),
+              // Tambahkan child untuk fallback jika gambar gagal dimuat
+              child: ClipOval(
+                child: Image(
+                  image: _getImageProvider(itemGroup.imagePath),
+                  fit: BoxFit.cover,
+                  width: 56,
+                  height: 56,
+                  errorBuilder: (context, error, stackTrace) {
+                    // Tampilkan inisial nama jika gambar gagal
+                    return Center(
+                      child: Text(
+                        itemGroup.itemName.isNotEmpty ? itemGroup.itemName[0] : '?',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    );
+                  },
+                ),
+              ),
             ),
             const SizedBox(width: 16),
 
@@ -53,7 +84,7 @@ class InventoryGroupItem extends StatelessWidget {
                     text: TextSpan(
                       style: TextStyle(color: Colors.grey[700], fontSize: 14),
                       children: [
-                        TextSpan(text: 'Total: ${itemGroup.totalQuantity} buah • '), // <-- Info diperjelas
+                        TextSpan(text: 'Total: ${itemGroup.totalQuantity} buah • '),
                         TextSpan(
                           text: groupStatus,
                           style: TextStyle(

@@ -1,8 +1,8 @@
 // lib/register_screen.dart
 
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // <-- Import Firebase Auth
-import 'dashboard_screen.dart'; // <-- Import Dasbor untuk navigasi
+import 'package:firebase_auth/firebase_auth.dart';
+import 'create_profile_screen.dart'; // <-- 1. IMPORT SCREEN BARU
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -17,9 +17,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _confirmPasswordController = TextEditingController();
   bool _isLoading = false;
 
-  // Fungsi untuk melakukan proses sign-up
   Future<void> _signUp() async {
-    // Validasi sederhana: pastikan password cocok
     if (_passwordController.text != _confirmPasswordController.text) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Password dan konfirmasi password tidak cocok.'), backgroundColor: Colors.red),
@@ -32,24 +30,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      // Buat user baru di Firebase
       await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
-      // Jika berhasil, langsung arahkan ke dasbor
       if (mounted) {
-        // pushAndRemoveUntil akan menghapus halaman login/register dari tumpukan
-        // sehingga pengguna tidak bisa kembali ke halaman itu dengan tombol back.
+        // 2. UBAH NAVIGASI KE CreateProfileScreen
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+          MaterialPageRoute(builder: (context) => const CreateProfileScreen()), // <-- PERUBAHAN DI SINI
           (Route<dynamic> route) => false,
         );
       }
     } on FirebaseAuthException catch (e) {
-      // Tangani error spesifik dari Firebase
       String errorMessage = 'Terjadi kesalahan, silakan coba lagi.';
       if (e.code == 'weak-password') {
         errorMessage = 'Password yang dimasukkan terlalu lemah.';
@@ -83,6 +77,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ... (Sisa kode build UI di bawah ini tidak ada yang berubah)
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
@@ -138,7 +133,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     _isLoading
                         ? const Center(child: CircularProgressIndicator())
                         : ElevatedButton(
-                            onPressed: _signUp, // <-- Panggil fungsi sign-up
+                            onPressed: _signUp,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF5D8A41),
                               foregroundColor: Colors.white,
