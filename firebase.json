@@ -33,7 +33,8 @@
         "firebase-debug.*.log",
         "*.local"
       ],
-      "runtime": "python311"
+      "runtime": "python311",
+      "entryPoint": "predict_initial_shelflife"
     }
   ]
 }
