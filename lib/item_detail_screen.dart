@@ -403,7 +403,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
           ),
           if (_isLoading)
             Container(
-              color: Colors.black.withOpacity(0.4),
+              color: Colors.black.withValues(alpha: 0.4),
               child: const Center(
                 child: CircularProgressIndicator(color: Colors.white),
               ),

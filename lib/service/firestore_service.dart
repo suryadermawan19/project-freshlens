@@ -123,7 +123,7 @@ class FirestoreService {
   Future<void> markAsUsed(Batch batch) async {
     final userDocRef = _db.collection('users').doc(_uid);
     final itemDocRef = _db.collection('users').doc(_uid).collection('items').doc(batch.id);
-    final double estimatedPricePerItem = 2500.0;
+    const double estimatedPricePerItem = 2500.0;
     final double moneySaved = batch.quantity * estimatedPricePerItem;
 
     return _db.runTransaction((transaction) async {

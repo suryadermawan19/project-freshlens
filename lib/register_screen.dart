@@ -91,7 +91,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               width: size.width * 0.9,
               height: size.height * 0.5,
               decoration: BoxDecoration(
-                color: const Color(0xFF5D8A41).withOpacity(0.3),
+                color: const Color(0xFF5D8A41).withValues(alpha: 0.3),
                 shape: BoxShape.circle,
               ),
             ),

@@ -1,11 +1,10 @@
 // lib/camera_screen.dart
 
-import 'dart:async';
-import 'dart:io';
 import 'package:camera/camera.dart';
-import 'package:flutter/material.dart'; // <-- PERBAIKAN UTAMA DI SINI
+import 'package:flutter/material.dart';
 import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
 import 'confirm_item_screen.dart';
+import 'dart:io';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -15,86 +14,70 @@ class CameraScreen extends StatefulWidget {
 }
 
 class _CameraScreenState extends State<CameraScreen> {
-  List<CameraDescription>? _cameras;
   CameraController? _controller;
-
+  List<CameraDescription>? _cameras;
   ImageLabeler? _imageLabeler;
+
   bool _isDetecting = false;
-  String _detectedLabel = "Arahkan ke buah atau sayur...";
-  Timer? _detectionTimer;
+  String _detectedLabel = 'Mengarahkan kamera ke objek buah...';
 
   @override
   void initState() {
     super.initState();
-    _initializeAIAndCamera();
+    _initializeCameraAndMlKit();
   }
 
-  @override
-  void dispose() {
-    _detectionTimer?.cancel();
-    _controller?.stopImageStream();
-    _controller?.dispose();
-    _imageLabeler?.close();
-    super.dispose();
-  }
-
-  String _translateLabel(String englishLabel) {
-    final lowerLabel = englishLabel.toLowerCase();
-    const dictionary = {
-      'apple': 'Apel',
-      'banana': 'Pisang',
-      'orange': 'Jeruk',
-      'tomato': 'Tomat',
-      'lettuce': 'Selada',
-      'carrot': 'Wortel',
-      'spinach': 'Bayam',
-      'broccoli': 'Brokoli',
-      'potato': 'Kentang',
-      'chili pepper': 'Cabai',
-    };
-    return dictionary[lowerLabel] ?? englishLabel;
-  }
-
-  Future<void> _initializeAIAndCamera() async {
-    final options = ImageLabelerOptions(confidenceThreshold: 0.75);
-    _imageLabeler = ImageLabeler(options: options);
-
+  Future<void> _initializeCameraAndMlKit() async {
     _cameras = await availableCameras();
     _controller = CameraController(
       _cameras![0],
-      ResolutionPreset.high,
+      ResolutionPreset.medium,
       enableAudio: false,
+      imageFormatGroup: Platform.isAndroid
+          ? ImageFormatGroup.nv21
+          : ImageFormatGroup.bgra8888,
     );
-    await _controller!.initialize();
 
-    _controller!.startImageStream(_processCameraImage);
+    try {
+      await _controller!.initialize();
+      if (!mounted) return;
 
-    if (mounted) setState(() {});
+      _controller!.startImageStream((CameraImage image) {
+        if (!_isDetecting) {
+          _isDetecting = true;
+          _processCameraImage(image).whenComplete(() => _isDetecting = false);
+        }
+      });
+
+      setState(() {});
+
+      final options = ImageLabelerOptions(confidenceThreshold: 0.75);
+      _imageLabeler = ImageLabeler(options: options);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error inisialisasi kamera: $e')),
+        );
+      }
+    }
   }
 
-  void _processCameraImage(CameraImage image) {
-    if (_isDetecting || !mounted || _imageLabeler == null) return;
-    _isDetecting = true;
+  Future<void> _processCameraImage(CameraImage image) async {
+    if (_imageLabeler == null) return;
 
     final inputImage = _inputImageFromCameraImage(image);
+    if (inputImage == null) return;
 
-    if (inputImage != null) {
-      _imageLabeler!.processImage(inputImage).then((labels) {
-        if (labels.isNotEmpty && mounted) {
-          final translatedLabel = _translateLabel(labels.first.label);
-          setState(() {
-            _detectedLabel = translatedLabel;
-          });
-        }
-      }).whenComplete(() {
-        _detectionTimer = Timer(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            _isDetecting = false;
-          }
+    try {
+      final List<ImageLabel> labels =
+          await _imageLabeler!.processImage(inputImage);
+      if (labels.isNotEmpty && mounted) {
+        setState(() {
+          _detectedLabel = labels.first.label;
         });
-      });
-    } else {
-      _isDetecting = false;
+      }
+    } catch (e) {
+      // Error logging
     }
   }
 
@@ -133,79 +116,83 @@ class _CameraScreenState extends State<CameraScreen> {
     );
   }
 
-  void _captureAndConfirm() async {
-    if (_detectedLabel.contains("Arahkan") ||
-        _controller == null ||
-        !_controller!.value.isInitialized) return;
+  @override
+  void dispose() {
+    _controller?.stopImageStream();
+    _controller?.dispose();
+    _imageLabeler?.close();
+    super.dispose();
+  }
 
-    await _controller!.stopImageStream();
-    final image = await _controller!.takePicture();
+  void _onConfirmPressed() async {
+    if (_controller == null || !_controller!.value.isInitialized) {
+      return;
+    }
 
-    if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ConfirmItemScreen(
-          imagePath: image.path,
-          detectedItemName: _detectedLabel,
+    try {
+      await _controller?.stopImageStream();
+      final image = await _controller!.takePicture();
+
+      if (!mounted) return; // 🔑 Tambah safety check
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => ConfirmItemScreen(
+            imagePath: image.path,
+            detectedItemName: _detectedLabel,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal mengkonfirmasi item: $e')),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_controller == null || !_controller!.value.isInitialized) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        alignment: Alignment.center,
-        children: [
-          SizedBox.expand(child: CameraPreview(_controller!)),
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withAlpha(153),
-                  Colors.transparent,
-                  Colors.black.withAlpha(204)
-                ],
-                stops: const [0.0, 0.4, 0.8],
-              ),
+      body: (_controller == null || !_controller!.value.isInitialized)
+          ? const Center(child: CircularProgressIndicator())
+          : Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox.expand(child: CameraPreview(_controller!)),
+                Positioned(
+                  top: 50,
+                  left: 20,
+                  right: 20,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Item Terdeteksi: $_detectedLabel',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 50,
+                  child: FloatingActionButton.large(
+                    onPressed: _onConfirmPressed,
+                    backgroundColor: Colors.white,
+                    child: const Icon(Icons.check, color: Colors.green),
+                  ),
+                ),
+              ],
             ),
-          ),
-          Positioned(
-            top: 60,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.black.withAlpha(128),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                _detectedLabel,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 50,
-            child: FloatingActionButton.large(
-              onPressed: _captureAndConfirm,
-              backgroundColor: Colors.white,
-              child: const Icon(Icons.camera_alt, color: Colors.black),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
