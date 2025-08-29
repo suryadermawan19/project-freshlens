@@ -1,10 +1,10 @@
 // lib/camera_screen.dart
 
+import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
 import 'confirm_item_screen.dart';
-import 'dart:io';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -28,17 +28,15 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _initializeCameraAndMlKit() async {
-    _cameras = await availableCameras();
-    _controller = CameraController(
-      _cameras![0],
-      ResolutionPreset.medium,
-      enableAudio: false,
-      imageFormatGroup: Platform.isAndroid
-          ? ImageFormatGroup.nv21
-          : ImageFormatGroup.bgra8888,
-    );
-
     try {
+      _cameras = await availableCameras();
+      _controller = CameraController(
+        _cameras![0],
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: Platform.isAndroid ? ImageFormatGroup.nv21 : ImageFormatGroup.bgra8888,
+      );
+
       await _controller!.initialize();
       if (!mounted) return;
 
@@ -53,11 +51,16 @@ class _CameraScreenState extends State<CameraScreen> {
 
       final options = ImageLabelerOptions(confidenceThreshold: 0.75);
       _imageLabeler = ImageLabeler(options: options);
+
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error inisialisasi kamera: $e')),
-        );
+        // Jalankan snackbar setelah frame build selesai
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error inisialisasi kamera: $e')),
+          );
+        });
       }
     }
   }
@@ -69,20 +72,19 @@ class _CameraScreenState extends State<CameraScreen> {
     if (inputImage == null) return;
 
     try {
-      final List<ImageLabel> labels =
-          await _imageLabeler!.processImage(inputImage);
+      final List<ImageLabel> labels = await _imageLabeler!.processImage(inputImage);
       if (labels.isNotEmpty && mounted) {
         setState(() {
           _detectedLabel = labels.first.label;
         });
       }
     } catch (e) {
-      // Error logging
+      // Bisa ditambah logging kalau perlu
     }
   }
 
   InputImage? _inputImageFromCameraImage(CameraImage image) {
-    if (_controller == null) return null;
+    if (_controller == null || _cameras == null) return null;
 
     final camera = _cameras![0];
     final sensorOrientation = camera.sensorOrientation;
@@ -102,7 +104,7 @@ class _CameraScreenState extends State<CameraScreen> {
       return null;
     }
 
-    if (image.planes.length != 1) return null;
+    if (image.planes.isEmpty) return null;
     final plane = image.planes.first;
 
     return InputImage.fromBytes(
@@ -118,24 +120,25 @@ class _CameraScreenState extends State<CameraScreen> {
 
   @override
   void dispose() {
-    _controller?.stopImageStream();
     _controller?.dispose();
     _imageLabeler?.close();
     super.dispose();
   }
 
   void _onConfirmPressed() async {
-    if (_controller == null || !_controller!.value.isInitialized) {
+    if (_controller == null ||
+        !_controller!.value.isInitialized ||
+        _controller!.value.isTakingPicture) {
       return;
     }
+
+    final navigator = Navigator.of(context);
 
     try {
       await _controller?.stopImageStream();
       final image = await _controller!.takePicture();
 
-      if (!mounted) return; // 🔑 Tambah safety check
-
-      Navigator.of(context).pushReplacement(
+      navigator.pushReplacement(
         MaterialPageRoute(
           builder: (context) => ConfirmItemScreen(
             imagePath: image.path,
@@ -148,6 +151,14 @@ class _CameraScreenState extends State<CameraScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Gagal mengkonfirmasi item: $e')),
         );
+      }
+      if (mounted && _controller!.value.isInitialized) {
+        _controller!.startImageStream((CameraImage image) {
+          if (!_isDetecting) {
+            _isDetecting = true;
+            _processCameraImage(image).whenComplete(() => _isDetecting = false);
+          }
+        });
       }
     }
   }

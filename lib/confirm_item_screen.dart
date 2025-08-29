@@ -2,7 +2,6 @@
 
 import 'dart:io';
 import 'package:flutter/material.dart';
-// Import yang tidak perlu sudah dihapus
 import 'package:freshlens_ai_app/service/firestore_service.dart';
 
 class ConfirmItemScreen extends StatefulWidget {
@@ -22,9 +21,10 @@ class ConfirmItemScreen extends StatefulWidget {
 class _ConfirmItemScreenState extends State<ConfirmItemScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _itemNameController = TextEditingController();
-  
-  String? _selectedCondition;
-  int _itemQuantity = 1;
+
+  int _quantity = 1;
+  int _selectedRipeness = -1; // -1 berarti belum ada yang dipilih
+  final ripenessOptions = ['Mentah', 'Setengah Matang', 'Matang'];
   bool _isSaving = false;
 
   @override
@@ -44,7 +44,14 @@ class _ConfirmItemScreenState extends State<ConfirmItemScreen> {
   }
 
   Future<void> _saveItem() async {
+    // Validasi form
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    if (_selectedRipeness == -1) {
+       ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pilih tingkat kematangan terlebih dahulu'), backgroundColor: Colors.orange),
+      );
       return;
     }
 
@@ -56,8 +63,8 @@ class _ConfirmItemScreenState extends State<ConfirmItemScreen> {
     try {
       await FirestoreService().addItem(
         itemName: _itemNameController.text,
-        quantity: _itemQuantity,
-        initialCondition: _selectedCondition!,
+        quantity: _quantity,
+        initialCondition: ripenessOptions[_selectedRipeness],
         imagePath: widget.imagePath,
       );
       
@@ -80,88 +87,81 @@ class _ConfirmItemScreenState extends State<ConfirmItemScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFFAF8F1),
       appBar: AppBar(
         title: const Text('Konfirmasi Item'),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.black,
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(12.0),
-                child: Image.file(File(widget.imagePath), height: 250, fit: BoxFit.cover),
+                borderRadius: BorderRadius.circular(20),
+                child: Image.file(File(widget.imagePath), height: 200, width: double.infinity, fit: BoxFit.cover),
               ),
               const SizedBox(height: 24),
-
+              const Text('Nama Item', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
               TextFormField(
                 controller: _itemNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Nama Item',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.shopping_basket_outlined),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 validator: (value) => value == null || value.isEmpty ? 'Nama item tidak boleh kosong' : null,
               ),
-              const SizedBox(height: 16),
-
-              DropdownButtonFormField<String>(
-                value: _selectedCondition,
-                decoration: const InputDecoration(
-                  labelText: 'Kondisi Awal',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.grain_outlined),
-                ),
-                items: <String>['Segar', 'Mentah', 'Setengah Matang', 'Matang']
-                    .map<DropdownMenuItem<String>>((String value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(value),
-                  );
-                }).toList(),
-                onChanged: (String? newValue) {
-                  setState(() => _selectedCondition = newValue);
-                },
-                validator: (value) => value == null ? 'Pilih kondisi awal item' : null,
-              ),
-              const SizedBox(height: 16),
-              
+              const SizedBox(height: 24),
+              const Text('Jumlah', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.remove_circle_outline, size: 32),
-                    onPressed: () {
-                      if (_itemQuantity > 1) setState(() => _itemQuantity--);
-                    },
-                  ),
+                  IconButton(icon: const Icon(Icons.remove_circle_outline, size: 32), onPressed: () => {if (_quantity > 1) setState(() => _quantity--)}),
                   const SizedBox(width: 24),
-                  Text('$_itemQuantity', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                  Text('$_quantity', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
                   const SizedBox(width: 24),
-                  IconButton(
-                    icon: const Icon(Icons.add_circle_outline, size: 32),
-                    onPressed: () => setState(() => _itemQuantity++),
-                  ),
+                  IconButton(icon: const Icon(Icons.add_circle_outline, size: 32), onPressed: () => setState(() => _quantity++)),
                 ],
               ),
               const SizedBox(height: 24),
-
-              ElevatedButton.icon(
+              const Text('Tingkat Kematangan', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8.0,
+                alignment: WrapAlignment.center,
+                children: List<Widget>.generate(3, (int index) {
+                  return ChoiceChip(
+                    label: Text(ripenessOptions[index]),
+                    selected: _selectedRipeness == index,
+                    onSelected: (bool selected) => setState(() => _selectedRipeness = selected ? index : -1),
+                    selectedColor: const Color(0xFFC8E6C9),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Colors.grey[300]!)),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 40),
+              ElevatedButton(
                 onPressed: _isSaving ? null : _saveItem,
-                icon: _isSaving ? Container() : const Icon(Icons.save),
-                label: _isSaving
-                    ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Simpan Item'),
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  textStyle: const TextStyle(fontSize: 18),
+                  backgroundColor: const Color(0xFF5D8A41),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                 ),
+                child: _isSaving 
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Simpan ke Inventaris', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
