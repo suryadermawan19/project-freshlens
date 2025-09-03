@@ -1,6 +1,14 @@
-firebase-functions>=0.4.3
-firebase-admin>=7.1.0
-xgboost>=3.0.4
-pandas>=2.3.2
-scikit-learn>=1.7.1
-numpy>=2.3.2
+firebase-functions==0.4.3
+firebase-admin==6.5.0
+
+google-cloud-storage==3.3.1
+google-cloud-firestore==2.16.0
+google-cloud-vision==3.10.2
+
+xgboost==2.0.3
+pandas==2.1.4
+numpy==1.26.4
+
+# Untuk kompatibilitas pandas & numpy
+python-dateutil==2.9.0.post0
+pytz==2024.1
