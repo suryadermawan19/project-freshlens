@@ -177,7 +177,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             Row(
                               children: [
                                 Expanded(child: _buildStatCard("Makanan Diselamatkan", userData['savedFoodCount'].toString(), "item")),
-                                const SizedBox(width: 16),
+                                const SizedBox(width: 20),
                                 Expanded(child: _buildStatCard("Estimasi Uang Hemat", "Rp ${userData['moneySaved'].toStringAsFixed(0)}", "")),
                               ],
                             ),

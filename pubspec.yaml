@@ -16,8 +16,9 @@ dependencies:
   cloud_firestore: ^5.0.2
   firebase_storage: ^12.1.1
   google_sign_in: ^6.2.1
-  firebase_functions: ^0.0.1-dev
-
+  flutter_local_notifications: ^17.2.1+1
+  timezone: ^0.9.4
+  firebase_messaging: ^15.0.1
   # UI & Utility
   cupertino_icons: ^1.0.2
   font_awesome_flutter: ^10.7.0

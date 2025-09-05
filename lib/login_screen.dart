@@ -1,9 +1,11 @@
-// lib/login_screen.dart (REVISI)
+// lib/login_screen.dart (REVISI LENGKAP DENGAN PROVIDER)
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:freshlens_ai_app/providers/loading_provider.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:provider/provider.dart'; // <-- 1. IMPORT PROVIDER
 import 'dashboard_screen.dart';
 import 'register_screen.dart';
 
@@ -17,11 +19,13 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  bool _isLoading = false;
+  // bool _isLoading = false; // <-- 2. HAPUS STATE LOKAL
 
   // Login Email & Password
   Future<void> _signInWithEmail() async {
-    setState(() => _isLoading = true);
+    // 3. PANGGIL LOADINGPROVIDER
+    final loadingProvider = Provider.of<LoadingProvider>(context, listen: false);
+    loadingProvider.startLoading();
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
@@ -46,13 +50,14 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      loadingProvider.stopLoading(); // Hentikan loading, apapun hasilnya
     }
   }
 
   // Login Google
   Future<void> _signInWithGoogle() async {
-    setState(() => _isLoading = true);
+    final loadingProvider = Provider.of<LoadingProvider>(context, listen: false);
+    loadingProvider.startLoading();
     try {
       final GoogleSignIn googleSignIn = GoogleSignIn(
         scopes: [
@@ -63,8 +68,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
-        if(mounted) setState(() => _isLoading = false);
-        return; // batal login
+        loadingProvider.stopLoading(); // Hentikan jika pengguna membatalkan
+        return;
       }
 
       final GoogleSignInAuthentication googleAuth =
@@ -86,14 +91,14 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gagal login dengan Google: $e'),
+          const SnackBar(
+            content: Text('Gagal login dengan Google. Silakan coba lagi.'),
             backgroundColor: Colors.red,
           ),
         );
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      loadingProvider.stopLoading();
     }
   }
 
@@ -107,123 +112,128 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    return Scaffold(
-      backgroundColor: const Color(0xFFFAF8F1),
-      body: Stack(
-        children: [
-          Positioned(
-            top: -size.height * 0.15,
-            right: -size.width * 0.4,
-            child: Container(
-              width: size.width * 0.9,
-              height: size.height * 0.5,
-              decoration: BoxDecoration(
-                color: const Color(0xFF5D8A41).withAlpha(77),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          SafeArea(
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SizedBox(height: size.height * 0.1),
-                    const Icon(Icons.eco_outlined,
-                        size: 80, color: Color(0xFF5D8A41)),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'FreshLens',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF4E5D49)),
-                    ),
-                    const SizedBox(height: 40),
-                    const Text(
-                      'Selamat Datang!',
-                      style:
-                          TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 24),
-                    TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration:
-                          _buildInputDecoration('Email', Icons.person_outline),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: true,
-                      decoration:
-                          _buildInputDecoration('Password', Icons.lock_outline),
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                          onPressed: () {}, child: const Text('Lupa Password?')),
-                    ),
-                    const SizedBox(height: 24),
-                    _isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : ElevatedButton(
-                            onPressed: _signInWithEmail,
-                            // Properti 'style' dihapus dari sini
-                            child: const Text('MASUK'),
-                          ),
-                    const SizedBox(height: 32),
-                    const Row(
-                      children: [
-                        Expanded(child: Divider()),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8.0),
-                          child: Text('Atau Masuk dengan'),
-                        ),
-                        Expanded(child: Divider()),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildSocialButton(FontAwesomeIcons.facebook, () {}),
-                        const SizedBox(width: 16),
-                        _buildSocialButton(
-                            FontAwesomeIcons.google, _signInWithGoogle),
-                        const SizedBox(width: 16),
-                        _buildSocialButton(FontAwesomeIcons.apple, () {}),
-                      ],
-                    ),
-                    const SizedBox(height: 32),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text("Belum punya akun?"),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (context) =>
-                                      const RegisterScreen()),
-                            );
-                          },
-                          child: const Text('Daftar'),
-                        ),
-                      ],
-                    ),
-                  ],
+    // 4. GUNAKAN CONSUMER UNTUK MENDENGARKAN PERUBAHAN
+    return Consumer<LoadingProvider>(
+      builder: (context, loadingProvider, child) {
+        return Scaffold(
+          backgroundColor: const Color(0xFFFAF8F1),
+          body: Stack(
+            children: [
+              Positioned(
+                top: -size.height * 0.15,
+                right: -size.width * 0.4,
+                child: Container(
+                  width: size.width * 0.9,
+                  height: size.height * 0.5,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF5D8A41).withAlpha(77),
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
-            ),
+              SafeArea(
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(height: size.height * 0.1),
+                        const Icon(Icons.eco_outlined,
+                            size: 80, color: Color(0xFF5D8A41)),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'FreshLens',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF4E5D49)),
+                        ),
+                        const SizedBox(height: 40),
+                        const Text(
+                          'Selamat Datang!',
+                          style:
+                              TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 24),
+                        TextFormField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration:
+                              _buildInputDecoration('Email', Icons.person_outline),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: true,
+                          decoration:
+                              _buildInputDecoration('Password', Icons.lock_outline),
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                              onPressed: () {}, child: const Text('Lupa Password?')),
+                        ),
+                        const SizedBox(height: 24),
+                        // 5. TAMPILKAN LOADING BERDASARKAN PROVIDER
+                        loadingProvider.isLoading
+                            ? const Center(child: CircularProgressIndicator())
+                            : ElevatedButton(
+                                onPressed: _signInWithEmail,
+                                child: const Text('MASUK'),
+                              ),
+                        const SizedBox(height: 32),
+                        const Row(
+                          children: [
+                            Expanded(child: Divider()),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 8.0),
+                              child: Text('Atau Masuk dengan'),
+                            ),
+                            Expanded(child: Divider()),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _buildSocialButton(FontAwesomeIcons.facebook, () {}),
+                            const SizedBox(width: 16),
+                            _buildSocialButton(
+                                FontAwesomeIcons.google, _signInWithGoogle),
+                            const SizedBox(width: 16),
+                            _buildSocialButton(FontAwesomeIcons.apple, () {}),
+                          ],
+                        ),
+                        const SizedBox(height: 32),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text("Belum punya akun?"),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (context) =>
+                                          const RegisterScreen()),
+                                );
+                              },
+                              child: const Text('Daftar'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

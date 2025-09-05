@@ -1,4 +1,4 @@
-// lib/dashboard_screen.dart
+// lib/dashboard_screen.dart (REVISI LENGKAP FINAL)
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -15,6 +15,7 @@ import 'inventory_screen.dart';
 import 'profile_screen.dart';
 import 'camera_screen.dart';
 
+// --- BAGIAN NAVIGATION BAWAH TIDAK BERUBAH ---
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
   @override
@@ -104,6 +105,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
+// --- BAGIAN KONTEN DASHBOARD DENGAN LOGIKA YANG DIPERBAIKI ---
 class DashboardContent extends StatefulWidget {
   final VoidCallback onViewAllTapped;
   const DashboardContent({super.key, required this.onViewAllTapped});
@@ -112,7 +114,6 @@ class DashboardContent extends StatefulWidget {
 }
 
 class _DashboardContentState extends State<DashboardContent> {
-  final TextEditingController _searchController = TextEditingController();
   final FirestoreService _firestoreService = FirestoreService();
   int _urgentDays = 4;
 
@@ -132,204 +133,135 @@ class _DashboardContentState extends State<DashboardContent> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFFAF8F1),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 40),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              StreamBuilder<DocumentSnapshot>(
-                stream: _firestoreService.getUserProfile(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return _buildHeader(name: 'Pengguna', imageUrl: null);
-                  }
-                  final userData = snapshot.data!.data() as Map<String, dynamic>;
-                  return _buildHeader(
-                    name: userData['name'] ?? 'Pengguna',
-                    imageUrl: userData['profileImageUrl'],
-                  );
-                },
-              ),
-              const SizedBox(height: 24),
-              TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Telusuri inventaris Anda...',
-                  prefixIcon: const Icon(Icons.search),
-                  filled: true,
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(20.0),
-                      borderSide: BorderSide.none),
+        child: StreamBuilder<QuerySnapshot>(
+          stream: _firestoreService.getInventoryItems(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final allDocs = snapshot.data?.docs ?? [];
+            final groupedItems = _groupItems(allDocs);
+
+            // Filter item yang urgent dari hasil grouping
+            final urgentItemGroups = groupedItems.where((group) {
+              final shortestDays = group.batches.map((b) => b.predictedShelfLife).reduce((a, b) => a < b ? a : b);
+              return shortestDays <= _urgentDays;
+            }).toList();
+            // Urutkan item kritis dari yang paling mendesak
+            urgentItemGroups.sort((a, b) {
+               final shortestDaysA = a.batches.map((batch) => batch.predictedShelfLife).reduce((val, el) => val < el ? val : el);
+               final shortestDaysB = b.batches.map((batch) => batch.predictedShelfLife).reduce((val, el) => val < el ? val : el);
+               return shortestDaysA.compareTo(shortestDaysB);
+            });
+
+            return ListView(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  child: StreamBuilder<DocumentSnapshot>(
+                    stream: _firestoreService.getUserProfile(),
+                    builder: (context, userSnapshot) {
+                      if (!userSnapshot.hasData) return _buildHeader(name: 'Pengguna');
+                      final userData = userSnapshot.data!.data() as Map<String, dynamic>;
+                      return _buildHeader(
+                        name: userData['name'] ?? 'Pengguna',
+                        imageUrl: userData['profileImageUrl'],
+                      );
+                    },
+                  ),
                 ),
-                onChanged: (query) => setState(() {}),
-              ),
-              StreamBuilder<QuerySnapshot>(
-                stream: _firestoreService.getInventoryItems(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Padding(
-                      padding: EdgeInsets.only(top: 50),
-                      child: Center(child: CircularProgressIndicator()),
+                const SizedBox(height: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  child: StreamBuilder<DocumentSnapshot>(
+                    stream: _firestoreService.getLatestSensorData(),
+                    builder: (context, sensorSnapshot) {
+                      if (!sensorSnapshot.hasData || !sensorSnapshot.data!.exists) {
+                        return _buildSensorRow(temperature: '0', humidity: '0');
+                      }
+                      final sensorData = sensorSnapshot.data!.data() as Map<String, dynamic>;
+                      final temp = sensorData['temperature']?.toStringAsFixed(1) ?? '0';
+                      final humid = sensorData['humidity']?.toStringAsFixed(1) ?? '0';
+                      return _buildSensorRow(temperature: temp, humidity: humid);
+                    },
+                  ),
+                ),
+                const SizedBox(height: 24),
+                _buildSectionTitle('Segera Habiskan'),
+                const SizedBox(height: 12),
+                _buildUrgentItemsCarousel(urgentItemGroups), // Kirim hasil grouping
+                const SizedBox(height: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Inventaris Saya', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      TextButton(onPressed: widget.onViewAllTapped, child: const Text('Lihat semua')),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (groupedItems.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
+                    child: Center(
+                      child: Text('Inventaris kosong. Tambahkan item dengan tombol kamera!',
+                          textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                    ),
+                  )
+                else
+                  ...groupedItems.take(3).map((itemGroup) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                      child: InventoryListItem(
+                        itemName: itemGroup.itemName,
+                        onTap: () {
+                          Navigator.push(context, MaterialPageRoute(
+                              builder: (context) => ItemDetailScreen(itemGroup: itemGroup)));
+                        },
+                      ),
                     );
-                  }
-                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                    return _buildEmptyDashboardContent();
-                  }
-
-                  final allItems = snapshot.data!.docs;
-
-                  if (_searchController.text.isNotEmpty) {
-                    final searchResult = allItems.where((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      return (data['itemName'] as String)
-                          .toLowerCase()
-                          .contains(_searchController.text.toLowerCase());
-                    }).toList();
-                    return _buildSearchResults(searchResult);
-                  }
-                  return _buildDashboardContent(allItems);
-                },
-              ),
-            ],
-          ),
+                  }),
+                const SizedBox(height: 40),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildHeader({required String name, required String? imageUrl}) {
+  Widget _buildHeader({required String name, String? imageUrl}) {
     final displayName = name.split(' ').first;
     return Row(
       children: [
         CircleAvatar(
           radius: 28,
           backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
-          child: imageUrl == null
-              ? Text(
-                  name.isNotEmpty ? name.substring(0, 1).toUpperCase() : 'A',
-                  style: const TextStyle(fontSize: 28),
-                )
-              : null,
+          child: imageUrl == null ? Text(name.isNotEmpty ? name.substring(0, 1).toUpperCase() : 'A',
+                  style: const TextStyle(fontSize: 28)) : null,
         ),
         const SizedBox(width: 16),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Halo,\n$displayName!',
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 24,
-                    height: 1.2)),
+            Text('Halo, $displayName!', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, height: 1.2)),
             const SizedBox(height: 4),
-            RichText(
-              text: const TextSpan(
-                style: TextStyle(fontSize: 14, fontFamily: 'Poppins'),
-                children: <TextSpan>[
-                  TextSpan(text: 'Selamat Datang di '),
-                  TextSpan(
-                      text: 'FreshLens AI',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
+            Text('Selamat datang kembali', style: TextStyle(color: Colors.grey[700])),
           ],
         ),
-      ],
-    );
-  }
-
-  Widget _buildSearchResults(List<DocumentSnapshot> results) {
-    if (results.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 20),
-        child: Center(child: Text('Item tidak ditemukan.')),
-      );
-    }
-    // ... implementasi UI hasil pencarian
-    return Container();
-  }
-
-  Widget _buildDashboardContent(List<DocumentSnapshot> allItems) {
-    final urgentItems = allItems.where((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      return (data['predictedShelfLife'] ?? 10) <= _urgentDays;
-    }).toList();
-
-    final itemGroups = _groupItems(allItems);
-    final previewItemGroups = itemGroups.take(3);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 24),
-        const Row(children: [
-          Icon(Icons.wb_sunny_outlined),
-          SizedBox(width: 8),
-          Text('Segera Habiskan', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        ]),
-        const SizedBox(height: 16),
-        if (urgentItems.isEmpty)
-          const Text('Tidak ada item yang perlu segera diolah. Bagus!')
-        else
-          ...urgentItems.map((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12.0),
-              child: UrgentItemCard(
-                itemIcon: FontAwesomeIcons.peopleArrows,
-                itemName: data['itemName'],
-                daysLeft: 'Sisa ${data['predictedShelfLife'] ?? '?'} hari',
-              ),
-            );
-          }),
-        const SizedBox(height: 30),
-        // --- PERUBAHAN UTAMA DI SINI ---
-        StreamBuilder<DocumentSnapshot>(
-          stream: _firestoreService.getLatestSensorData(),
-          builder: (context, snapshot) {
-            // Tampilkan data default jika tidak ada data sensor
-            if (!snapshot.hasData || !snapshot.data!.exists) {
-              return _buildSensorRow(temperature: '--', humidity: '--');
-            }
-            final sensorData = snapshot.data!.data() as Map<String, dynamic>;
-            final temp = sensorData['temperature']?.toStringAsFixed(1) ?? '--';
-            final humid = sensorData['humidity']?.toStringAsFixed(1) ?? '--';
-            return _buildSensorRow(temperature: temp, humidity: humid);
-          },
-        ),
-        const SizedBox(height: 30),
-        Row(
-          children: [
-            const Icon(Icons.inventory_2_outlined),
-            const SizedBox(width: 8),
-            const Text('Inventaris', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const Spacer(),
-            TextButton(
-                onPressed: widget.onViewAllTapped,
-                child: const Text('Lihat semua')),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ...previewItemGroups.map((itemGroup) {
-          return InventoryListItem(
-            itemName: itemGroup.itemName,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ItemDetailScreen(itemGroup: itemGroup),
-                ),
-              );
-            },
-          );
-        }),
       ],
     );
   }
   
-  // --- WIDGET BARU UNTUK BARIS SENSOR ---
   Widget _buildSensorRow({required String temperature, required String humidity}) {
+    final double tempValue = double.tryParse(temperature) ?? 0.0;
+    final double humidValue = double.tryParse(humidity) ?? 0.0;
     return Row(
       children: [
         Expanded(
@@ -338,7 +270,8 @@ class _DashboardContentState extends State<DashboardContent> {
             icon: Icons.thermostat,
             value: temperature,
             unit: '°C',
-            status: 'Normal', // Status bisa dibuat dinamis nanti
+            color: Colors.blue.shade700,
+            sensorValue: tempValue,
           ),
         ),
         const SizedBox(width: 16),
@@ -348,54 +281,67 @@ class _DashboardContentState extends State<DashboardContent> {
             icon: Icons.water_drop_outlined,
             value: humidity,
             unit: '%',
-            status: 'Optimal', // Status bisa dibuat dinamis nanti
+            color: Colors.green.shade700,
+            sensorValue: humidValue,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildEmptyDashboardContent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 24),
-        const Row(children: [
-          Icon(Icons.wb_sunny_outlined),
-          SizedBox(width: 8),
-          Text('Segera Habiskan', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        ]),
-        const SizedBox(height: 16),
-        const Text("Semua bahan makanan Anda masih segar!"),
-        const SizedBox(height: 30),
-        // Tampilkan sensor dengan data default
-        _buildSensorRow(temperature: '--', humidity: '--'),
-        const SizedBox(height: 30),
-        Row(
-          children: [
-            const Icon(Icons.inventory_2_outlined),
-            const SizedBox(width: 8),
-            const Text('Inventaris', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const Spacer(),
-            TextButton(
-                onPressed: widget.onViewAllTapped,
-                child: const Text('Lihat semua')),
-          ],
-        ),
-        const SizedBox(height: 16),
-        const Text("Inventaris Anda masih kosong."),
-      ],
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+      child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
     );
   }
 
+  Widget _buildUrgentItemsCarousel(List<InventoryItemGroup> items) {
+    if (items.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20.0),
+        height: 100,
+        child: const Center(
+          child: Text('Tidak ada item yang perlu segera diolah. Bagus!',
+              style: TextStyle(color: Colors.grey)),
+        ),
+      );
+    }
+    return SizedBox(
+      height: 180,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: items.length,
+        padding: const EdgeInsets.symmetric(horizontal: 20.0),
+        itemBuilder: (context, index) {
+          final itemGroup = items[index];
+          final shortestDays = itemGroup.batches.map((b) => b.predictedShelfLife).reduce((a, b) => a < b ? a : b);
+          return Padding(
+            padding: EdgeInsets.only(right: index == items.length - 1 ? 0 : 12),
+            child: GestureDetector( // Dibungkus GestureDetector agar bisa di-tap
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (context) => ItemDetailScreen(itemGroup: itemGroup),
+                ));
+              },
+              child: UrgentItemCard(
+                itemName: itemGroup.itemName,
+                daysLeft: shortestDays,
+                imageUrl: itemGroup.imagePath,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+  
   List<InventoryItemGroup> _groupItems(List<DocumentSnapshot> allItems) {
     final Map<String, List<DocumentSnapshot>> groupedItems = {};
     for (var doc in allItems) {
       final data = doc.data() as Map<String, dynamic>;
       final itemName = data['itemName'] as String;
-      if (groupedItems[itemName] == null) {
-        groupedItems[itemName] = [];
-      }
+      if (groupedItems[itemName] == null) groupedItems[itemName] = [];
       groupedItems[itemName]!.add(doc);
     }
     return groupedItems.entries.map((entry) {
@@ -413,11 +359,7 @@ class _DashboardContentState extends State<DashboardContent> {
           initialCondition: data['initialCondition'] ?? 'Tidak diketahui',
         );
       }).toList();
-      return InventoryItemGroup(
-        itemName: itemName,
-        imagePath: imagePath,
-        batches: batches,
-      );
+      return InventoryItemGroup(itemName: itemName, imagePath: imagePath, batches: batches);
     }).toList();
   }
 }
