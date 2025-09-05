@@ -1,4 +1,4 @@
-// lib/profile_screen.dart
+// lib/profile_screen.dart (REVISI)
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,7 +7,7 @@ import 'package:freshlens_ai_app/edit_profile_screen.dart';
 import 'package:freshlens_ai_app/login_screen.dart';
 import 'package:freshlens_ai_app/service/firestore_service.dart';
 import 'package:freshlens_ai_app/settings_screen.dart';
-import 'package:image_picker/image_picker.dart'; // <-- 1. IMPORT IMAGE_PICKER
+import 'package:image_picker/image_picker.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -19,39 +19,43 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  bool _isUploading = false; // State untuk loading indicator
+  bool _isUploading = false;
 
   Future<void> _signOut() async {
+    // <-- PERBAIKAN 1: Simpan referensi Navigator sebelum 'await'
+    final navigator = Navigator.of(context);
+    
     await _auth.signOut();
-    if (mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-        (route) => false,
-      );
-    }
+    
+    // Gunakan navigator yang sudah disimpan, ini lebih aman
+    navigator.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const LoginScreen()),
+      (route) => false,
+    );
   }
 
-  // --- 2. FUNGSI BARU UNTUK MEMILIH DAN MENGUNGGAH GAMBAR ---
   Future<void> _pickAndUploadImage(ImageSource source) async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: source, imageQuality: 50);
 
     if (pickedFile != null) {
+      // <-- PERBAIKAN 2: Simpan referensi ScaffoldMessenger sebelum 'await'
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+
       setState(() => _isUploading = true);
       try {
         await _firestoreService.uploadProfileImage(pickedFile.path);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Foto profil berhasil diperbarui!'), backgroundColor: Colors.green),
-          );
-        }
+
+        // Cek 'mounted' tetap penting
+        if (!mounted) return;
+        scaffoldMessenger.showSnackBar( // Gunakan messenger yang sudah disimpan
+          const SnackBar(content: Text('Foto profil berhasil diperbarui!'), backgroundColor: Colors.green),
+        );
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Gagal mengunggah foto: $e'), backgroundColor: Colors.red),
-          );
-        }
+        if (!mounted) return;
+        scaffoldMessenger.showSnackBar( // Gunakan messenger yang sudah disimpan
+          SnackBar(content: Text('Gagal mengunggah foto: $e'), backgroundColor: Colors.red),
+        );
       } finally {
         if (mounted) {
           setState(() => _isUploading = false);
@@ -60,7 +64,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- 3. FUNGSI BARU UNTUK MENAMPILKAN PILIHAN SUMBER GAMBAR ---
+  // --- (Sisa kode tidak ada yang berubah) ---
+  
   void _showImageSourceActionSheet() {
     showModalBottomSheet(
       context: context,
@@ -89,7 +94,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -110,7 +114,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           return Stack(
             children: [
-              // (Background tidak berubah)
               Positioned(
                 top: -size.height * 0.2,
                 left: -size.width * 0.1,
@@ -130,7 +133,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 16),
                       const Text("Profil", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 16),
-                      // --- 4. BUAT FOTO PROFIL BISA DITEKAN ---
                       Stack(
                         children: [
                           CircleAvatar(
@@ -145,12 +147,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   )
                                 : null,
                           ),
-                          // Tampilkan loading indicator di atas foto saat mengunggah
                           if (_isUploading)
                             const Positioned.fill(
                               child: CircularProgressIndicator(color: Colors.white),
                             ),
-                          // Tombol tak terlihat untuk aksi tap
                           Positioned.fill(
                             child: Material(
                               color: Colors.transparent,
@@ -167,7 +167,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 4),
                       Text(userData['email'] ?? 'email@pengguna.com', style: TextStyle(fontSize: 16, color: Colors.grey[700])),
                       const SizedBox(height: 40),
-                      // (Sisa UI tidak berubah)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20.0),
                         child: Column(
@@ -243,7 +242,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // (Sisa widget helper tidak berubah)
   Widget _buildStatCard(String title, String value, String unit) {
     return Card(
       elevation: 2,

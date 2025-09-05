@@ -1,4 +1,4 @@
-// lib/login_screen.dart
+// lib/login_screen.dart (REVISI)
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -63,7 +63,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
-        setState(() => _isLoading = false);
+        if(mounted) setState(() => _isLoading = false);
         return; // batal login
       }
 
@@ -173,19 +173,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? const Center(child: CircularProgressIndicator())
                         : ElevatedButton(
                             onPressed: _signInWithEmail,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF5D8A41),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                            ),
-                            child: const Text(
-                              'MASUK',
-                              style: TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
+                            // Properti 'style' dihapus dari sini
+                            child: const Text('MASUK'),
                           ),
                     const SizedBox(height: 32),
                     const Row(

@@ -1,53 +1,94 @@
 // lib/main.dart
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 import 'package:firebase_core/firebase_core.dart';
-import 'package:freshlens_ai_app/theme_provider.dart';
-import 'package:provider/provider.dart';
-import 'firebase_options.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import 'firebase_options.dart'; // hasil `flutterfire configure`
+import 'theme_provider.dart';
 import 'login_screen.dart';
+import 'dashboard_screen.dart';
+
+import 'package:provider/provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
-  // Bungkus aplikasi dengan ThemeProvider
+
+  // Inisialisasi Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // Aktifkan App Check
+  // - Release: Play Integrity (Android) / DeviceCheck (iOS)
+  // - Debug: Debug provider (otomatis agar dev lancar)
+  await FirebaseAppCheck.instance.activate(
+    androidProvider:
+        kReleaseMode ? AndroidProvider.playIntegrity : AndroidProvider.debug,
+    appleProvider:
+        kReleaseMode ? AppleProvider.deviceCheck : AppleProvider.debug,
+    // Jika target Web dan ingin enforce App Check:
+    // webProvider: ReCaptchaV3Provider('YOUR_RECAPTCHA_SITE_KEY'),
+  );
+
   runApp(
     ChangeNotifierProvider(
-      create: (context) => ThemeProvider(),
-      child: const FreshLensApp(),
+      create: (_) => ThemeProvider(),
+      child: const MyApp(),
     ),
   );
 }
 
-class FreshLensApp extends StatelessWidget {
-  const FreshLensApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Gunakan Consumer untuk mendapatkan state tema saat ini
-    return Consumer<ThemeProvider>(
-      builder: (context, themeProvider, child) {
-        return MaterialApp(
-          debugShowCheckedModeBanner: false,
-          title: 'FreshLens AI',
-          // Tentukan tema terang dan gelap
-          theme: ThemeData(
-            primarySwatch: Colors.green,
-            fontFamily: 'Poppins',
-            brightness: Brightness.light,
-            scaffoldBackgroundColor: const Color(0xFFFAF8F1),
-          ),
-          darkTheme: ThemeData(
-            primarySwatch: Colors.green,
-            fontFamily: 'Poppins',
-            brightness: Brightness.dark,
-            // Anda bisa menyesuaikan warna dark mode di sini
-          ),
-          // Atur themeMode dari provider
-          themeMode: themeProvider.themeMode,
-          home: const LoginScreen(),
-        );
+    final theme = context.watch<ThemeProvider>();
+
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'FreshLens',
+      themeMode: theme.themeMode,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5D8A41)),
+        useMaterial3: true,
+        brightness: Brightness.light,
+      ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF5D8A41),
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+        brightness: Brightness.dark,
+      ),
+      home: const _AuthGate(),
+    );
+  }
+}
+
+/// Pilih layar awal berdasarkan status login
+class _AuthGate extends StatelessWidget {
+  const _AuthGate();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final user = snap.data;
+        if (user == null) {
+          return const LoginScreen();
+        }
+        return const DashboardScreen();
       },
     );
   }

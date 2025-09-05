@@ -277,7 +277,7 @@ class _DashboardContentState extends State<DashboardContent> {
             return Padding(
               padding: const EdgeInsets.only(bottom: 12.0),
               child: UrgentItemCard(
-                itemIcon: FontAwesomeIcons.carrot,
+                itemIcon: FontAwesomeIcons.peopleArrows,
                 itemName: data['itemName'],
                 daysLeft: 'Sisa ${data['predictedShelfLife'] ?? '?'} hari',
               ),
@@ -337,7 +337,7 @@ class _DashboardContentState extends State<DashboardContent> {
             title: 'Suhu',
             icon: Icons.thermostat,
             value: temperature,
-            unit: '° C',
+            unit: '°C',
             status: 'Normal', // Status bisa dibuat dinamis nanti
           ),
         ),
