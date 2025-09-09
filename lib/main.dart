@@ -1,4 +1,4 @@
-// lib/main.dart (REVISI FINAL DENGAN FIX)
+// lib/main.dart
 
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -39,17 +39,18 @@ class FreshLensApp extends StatelessWidget {
 
   ThemeData _buildTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
-    
+
     final baseTheme = ThemeData(
       brightness: brightness,
-      fontFamily: 'Poppins',
+      // ### PERUBAHAN UTAMA DI SINI ###
+      fontFamily: 'Montserrat',
       primaryColor: AppColors.primaryGreen,
-      // PERBAIKAN 2: Hapus properti 'background' yang sudah usang dari ColorScheme
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.primaryGreen,
         brightness: brightness,
       ),
-      scaffoldBackgroundColor: isDark ? AppColors.darkBackground : AppColors.backgroundCream,
+      scaffoldBackgroundColor:
+          isDark ? AppColors.darkBackground : AppColors.backgroundCream,
     );
 
     return baseTheme.copyWith(
@@ -58,32 +59,36 @@ class FreshLensApp extends StatelessWidget {
           backgroundColor: AppColors.primaryGreen,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           textStyle: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
-            fontFamily: 'Poppins',
+            // Pastikan font family juga diatur di sini untuk konsistensi
+            fontFamily: 'Montserrat',
           ),
         ),
       ),
-      // PERBAIKAN 1: Gunakan CardThemeData, bukan CardTheme
       cardTheme: CardThemeData(
         elevation: 1,
         margin: EdgeInsets.zero,
         color: isDark ? AppColors.darkCard : Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: const BorderRadius.all(Radius.circular(16)),
-          side: isDark ? BorderSide(color: Colors.grey.shade800) : BorderSide.none,
+          side: isDark
+              ? BorderSide(color: Colors.grey.shade800)
+              : BorderSide.none,
         ),
         clipBehavior: Clip.antiAlias,
       ),
-      appBarTheme: AppBarTheme(
+      appBarTheme: const AppBarTheme(
         elevation: 0,
         backgroundColor: Colors.transparent,
-        foregroundColor: isDark ? Colors.white : Colors.black,
+        foregroundColor:
+            Colors.black, // Ini akan disesuaikan oleh tema dark/light
         centerTitle: true,
-        titleTextStyle: const TextStyle(
-          fontFamily: 'Poppins',
+        titleTextStyle: TextStyle(
+          fontFamily: 'Montserrat',
           fontSize: 18,
           fontWeight: FontWeight.w600,
         ),
@@ -100,16 +105,23 @@ class FreshLensApp extends StatelessWidget {
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
       ),
-      textTheme: baseTheme.textTheme.copyWith(
-        headlineMedium: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
-        titleLarge: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-        titleMedium: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
-        bodyLarge: const TextStyle(fontSize: 16),
-        bodyMedium: const TextStyle(fontSize: 14),
-      ).apply(
-        bodyColor: isDark ? Colors.white : Colors.black87,
-        displayColor: isDark ? Colors.white : Colors.black87,
-      ),
+      // Definisikan textTheme secara eksplisit
+      textTheme: baseTheme.textTheme
+          .copyWith(
+            headlineSmall:
+                const TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+            titleLarge:
+                const TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+            titleMedium:
+                const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+            bodyLarge: const TextStyle(fontSize: 16),
+            bodyMedium: const TextStyle(fontSize: 14),
+          )
+          .apply(
+            fontFamily: 'Montserrat', // Terapkan ke semua text style
+            bodyColor: isDark ? Colors.white : Colors.black87,
+            displayColor: isDark ? Colors.white : Colors.black87,
+          ),
     );
   }
 

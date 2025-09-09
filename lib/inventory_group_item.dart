@@ -13,104 +13,102 @@ class InventoryGroupItem extends StatelessWidget {
     required this.onTap,
   });
 
-  String _getStatusForDays(int days) {
-    if (days <= 2) return 'Kritis';
-    if (days <= 4) return 'Segera Olah';
-    return 'Segar';
+  // Helper untuk menentukan status dan warna
+  (String, Color) _getStatusInfo() {
+    final shortestDaysLeft = itemGroup.batches
+        .map((b) => b.predictedShelfLife)
+        .reduce((a, b) => a < b ? a : b);
+
+    if (shortestDaysLeft <= 2) {
+      return ('Kritis', Colors.red.shade600);
+    } else if (shortestDaysLeft <= 4) {
+      return ('Segera Olah', Colors.orange.shade700);
+    } else {
+      return ('Segar', Colors.green.shade600);
+    }
   }
 
-  // FUNGSI BARU UNTUK MENENTUKAN TIPE GAMBAR
   ImageProvider _getImageProvider(String path) {
-    // Jika path adalah URL dari internet, gunakan NetworkImage
     if (path.startsWith('http')) {
       return NetworkImage(path);
-    }
-    // Jika tidak, anggap itu adalah aset lokal
-    else {
-      return AssetImage(path);
+    } else {
+      return const AssetImage('assets/images/placeholder.png');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final criticalBatch = itemGroup.batches.reduce((a, b) => a.predictedShelfLife < b.predictedShelfLife ? a : b);
-    final shortestDaysLeft = criticalBatch.predictedShelfLife;
-    final groupStatus = _getStatusForDays(shortestDaysLeft);
-    final statusColor = groupStatus == 'Kritis' ? Colors.red.shade700 : (groupStatus == 'Segera Olah' ? Colors.orange.shade800 : Colors.green.shade800);
+    final (statusText, statusColor) = _getStatusInfo();
 
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: Row(
+    return Card(
+      elevation: 0.5,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        // PERBAIKAN WARNING: Menggunakan withAlpha()
+        side: BorderSide(color: Theme.of(context).dividerColor.withAlpha(128)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Gambar di Kiri
-            CircleAvatar(
-              radius: 28,
-              // GUNAKAN FUNGSI _getImageProvider DI SINI
-              backgroundImage: _getImageProvider(itemGroup.imagePath),
-              // Tambahkan child untuk fallback jika gambar gagal dimuat
-              child: ClipOval(
-                child: Image(
-                  image: _getImageProvider(itemGroup.imagePath),
-                  fit: BoxFit.cover,
-                  width: 56,
-                  height: 56,
-                  errorBuilder: (context, error, stackTrace) {
-                    // Tampilkan inisial nama jika gambar gagal
-                    return Center(
-                      child: Text(
-                        itemGroup.itemName.isNotEmpty ? itemGroup.itemName[0] : '?',
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    );
-                  },
+            Expanded(
+              child: Container(
+                color: Colors.grey.shade100,
+                // PERBAIKAN ERROR: Widget Image dibungkus dengan Padding
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Image(
+                    image: _getImageProvider(itemGroup.imagePath),
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(Icons.inventory_2_outlined,
+                          color: Colors.grey, size: 40);
+                    },
+                  ),
                 ),
               ),
             ),
-            const SizedBox(width: 16),
-
-            // Teks di Tengah
-            Expanded(
+            Padding(
+              padding: const EdgeInsets.all(12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     itemGroup.itemName,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  RichText(
-                    text: TextSpan(
-                      style: TextStyle(color: Colors.grey[700], fontSize: 14),
-                      children: [
-                        TextSpan(text: 'Total: ${itemGroup.totalQuantity} buah • '),
-                        TextSpan(
-                          text: groupStatus,
-                          style: TextStyle(
-                            color: statusColor,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+                  Text(
+                    'Total: ${itemGroup.totalQuantity} buah',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      // PERBAIKAN WARNING: Menggunakan withAlpha()
+                      color: statusColor.withAlpha(38),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      statusText,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 16),
-
-            // Sisa Hari di Kanan
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '$shortestDaysLeft',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.black87),
-                ),
-                const Text('hari lagi', style: TextStyle(fontSize: 12, color: Colors.black54)),
-              ],
             ),
           ],
         ),

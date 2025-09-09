@@ -17,6 +17,7 @@ class InventoryScreen extends StatefulWidget {
 class _InventoryScreenState extends State<InventoryScreen> {
   final FirestoreService _firestoreService = FirestoreService();
 
+  // Logika untuk sorting tidak berubah
   String _getStatusForDays(int days) {
     if (days <= 2) return 'Kritis';
     if (days <= 4) return 'Segera Olah';
@@ -25,14 +26,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
   
   int _getPriorityForStatus(String status) {
     switch (status) {
-      case 'Kritis':
-        return 1;
-      case 'Segera Olah':
-        return 2;
-      case 'Segar':
-        return 3;
-      default:
-        return 4;
+      case 'Kritis': return 1;
+      case 'Segera Olah': return 2;
+      case 'Segar': return 3;
+      default: return 4;
     }
   }
 
@@ -41,10 +38,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFFAF8F1),
       appBar: AppBar(
-        title: const Text('Inventaris'),
+        title: const Text('Inventaris Saya'),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: const Color(0xFFFAF8F1),
+        backgroundColor: Colors.transparent, // AppBar transparan
         foregroundColor: Colors.black,
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -57,62 +54,74 @@ class _InventoryScreenState extends State<InventoryScreen> {
             return const Center(
               child: Padding(
                 padding: EdgeInsets.all(24.0),
-                child: Text(
-                  'Inventaris Anda kosong.\n\nTekan tombol kamera di bawah untuk menambahkan item pertama Anda!',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 18, color: Colors.grey),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.inventory_2_outlined, size: 80, color: Colors.grey),
+                    SizedBox(height: 16),
+                    Text(
+                      'Inventaris Anda kosong',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Tekan tombol kamera di bawah untuk menambahkan item pertama Anda!',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
+                  ],
                 ),
               ),
             );
           }
 
+          // Logika grouping dan sorting data tidak berubah
           final itemDocs = snapshot.data!.docs;
-
           final Map<String, List<DocumentSnapshot>> groupedItems = {};
           for (var doc in itemDocs) {
             final data = doc.data() as Map<String, dynamic>;
             final itemName = data['itemName'] as String;
-            if (groupedItems[itemName] == null) {
-              groupedItems[itemName] = [];
-            }
+            if (groupedItems[itemName] == null) groupedItems[itemName] = [];
             groupedItems[itemName]!.add(doc);
           }
 
           final List<InventoryItemGroup> allItemGroups = groupedItems.entries.map((entry) {
-            final itemName = entry.key;
             final batchesData = entry.value;
             final firstItemData = batchesData.first.data() as Map<String, dynamic>;
-            final imagePath = firstItemData['imageUrl'] ?? 'assets/images/placeholder.png';
-
-            final batches = batchesData.map((doc) {
-              final data = doc.data() as Map<String, dynamic>;
-              return Batch(
-                id: doc.id,
-                entryDate: (data['entryDate'] as Timestamp? ?? Timestamp.now()).toDate(),
-                quantity: data['quantity'] ?? 0,
-                predictedShelfLife: data['predictedShelfLife'] ?? 7,
-                initialCondition: data['initialCondition'] ?? 'Tidak diketahui', // <-- PERUBAHAN DI SINI
-              );
-            }).toList();
-
             return InventoryItemGroup(
-              itemName: itemName,
-              imagePath: imagePath,
-              batches: batches,
+              itemName: entry.key,
+              imagePath: firstItemData['imageUrl'] ?? 'assets/images/placeholder.png',
+              batches: batchesData.map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                return Batch(
+                  id: doc.id,
+                  entryDate: (data['entryDate'] as Timestamp? ?? Timestamp.now()).toDate(),
+                  quantity: data['quantity'] ?? 0,
+                  predictedShelfLife: data['predictedShelfLife'] ?? 7,
+                  initialCondition: data['initialCondition'] ?? 'Tidak diketahui',
+                );
+              }).toList(),
             );
           }).toList();
 
           allItemGroups.sort((a, b) {
-            final shortestDaysA = a.batches.map((batch) => batch.predictedShelfLife).reduce((val, el) => val < el ? val : el);
-            final shortestDaysB = b.batches.map((batch) => batch.predictedShelfLife).reduce((val, el) => val < el ? val : el);
+            final shortestDaysA = a.batches.map((b) => b.predictedShelfLife).reduce((v, e) => v < e ? v : e);
+            final shortestDaysB = b.batches.map((b) => b.predictedShelfLife).reduce((v, e) => v < e ? v : e);
             final priorityA = _getPriorityForStatus(_getStatusForDays(shortestDaysA));
             final priorityB = _getPriorityForStatus(_getStatusForDays(shortestDaysB));
             return priorityA.compareTo(priorityB);
           });
 
-          return ListView.separated(
-            padding: const EdgeInsets.symmetric(vertical: 8.0),
+          // ### PERUBAHAN UTAMA: Menggunakan GridView.builder ###
+          return GridView.builder(
+            padding: const EdgeInsets.all(16.0),
             itemCount: allItemGroups.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2, // 2 kolom
+              crossAxisSpacing: 16.0, // Jarak horizontal
+              mainAxisSpacing: 16.0, // Jarak vertikal
+              childAspectRatio: 0.8, // Rasio lebar-tinggi kartu
+            ),
             itemBuilder: (context, index) {
               final itemGroup = allItemGroups[index];
               return InventoryGroupItem(
@@ -125,7 +134,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 ),
               );
             },
-            separatorBuilder: (context, index) => const Divider(indent: 20, endIndent: 20),
           );
         },
       ),

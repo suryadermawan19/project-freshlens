@@ -22,10 +22,12 @@ class ArticleListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12.0),
         child: Row(
           children: [
+            // Teks di sebelah kiri
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -33,37 +35,38 @@ class ArticleListItem extends StatelessWidget {
                   Text(
                     source.toUpperCase(),
                     style: TextStyle(
-                      color: Colors.grey[600],
+                      color: Colors.grey[700],
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
                     title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      height: 1.3,
+                      fontSize: 17,
+                      height: 1.4, // Jarak antar baris teks
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     time,
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
                   ),
                 ],
               ),
             ),
             const SizedBox(width: 16),
+            // Gambar di sebelah kanan
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Image.asset(
                 imagePath,
-                width: 100,
-                height: 100,
+                width: 110,
+                height: 110,
                 fit: BoxFit.cover,
               ),
             ),

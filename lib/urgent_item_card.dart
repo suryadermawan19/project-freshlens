@@ -1,11 +1,11 @@
-// lib/urgent_item_card.dart (REVISI LENGKAP)
+// lib/urgent_item_card.dart
 
 import 'package:flutter/material.dart';
 
 class UrgentItemCard extends StatelessWidget {
   final String itemName;
   final int daysLeft;
-  final String imageUrl; // Tambahkan imageUrl untuk menampilkan gambar
+  final String imageUrl;
 
   const UrgentItemCard({
     super.key,
@@ -14,83 +14,102 @@ class UrgentItemCard extends StatelessWidget {
     required this.imageUrl,
   });
 
-  // Helper untuk menentukan warna berdasarkan sisa hari
   Color _getDaysColor() {
     if (daysLeft <= 2) {
-      return Colors.red.shade700;
+      return Colors.red.shade600;
     } else if (daysLeft <= 4) {
-      return Colors.orange.shade800;
+      return Colors.orange.shade600;
     }
-    return Colors.green.shade800;
+    return Colors.green.shade600;
   }
 
-  // Helper untuk mendapatkan gambar
   ImageProvider _getImageProvider(String path) {
     if (path.startsWith('http')) {
       return NetworkImage(path);
     } else {
-      // Fallback jika path bukan URL
       return const AssetImage('assets/images/placeholder.png');
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
     final color = _getDaysColor();
 
     return Card(
-      elevation: 2,
+      clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      clipBehavior: Clip.antiAlias, // Penting untuk melengkungkan gambar
+      elevation: 3,
+      // PERBAIKAN WARNING: Menggunakan withAlpha()
+      shadowColor: Colors.black.withAlpha(77),
       child: Container(
-        width: 160, // Lebar kartu tetap untuk carousel
+        width: 160,
+        height: 180,
         decoration: BoxDecoration(
           image: DecorationImage(
             image: _getImageProvider(imageUrl),
             fit: BoxFit.cover,
-            // Buat gambar sedikit gelap agar teks mudah dibaca
-            colorFilter: ColorFilter.mode(
-              Colors.black.withOpacity(0.4),
-              BlendMode.darken,
-            ),
           ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.end, // Posisikan konten di bawah
-            children: [
-              Text(
-                itemName,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: Colors.white,
-                  shadows: [Shadow(blurRadius: 2.0, color: Colors.black54)],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Container(
                 decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'Sisa $daysLeft hari',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      // PERBAIKAN WARNING: Menggunakan withAlpha()
+                      Colors.black.withAlpha(26),
+                      Colors.black.withAlpha(204),
+                    ],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: const [0.5, 0.7, 1.0],
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+            Positioned(
+              bottom: 12,
+              left: 12,
+              right: 12,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    itemName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.white,
+                      shadows: [
+                        Shadow(blurRadius: 2.0, color: Colors.black54)
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Sisa $daysLeft hari',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

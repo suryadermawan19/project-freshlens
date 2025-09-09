@@ -1,4 +1,4 @@
-// lib/sensor_card.dart (REVISI FINAL - LOGIKA SUHU FLEKSIBEL)
+// lib/sensor_card.dart
 
 import 'package:flutter/material.dart';
 
@@ -20,8 +20,7 @@ class SensorCard extends StatelessWidget {
     required this.sensorValue,
   });
 
-  // --- LOGIKA BARU YANG LEBIH FLEKSIBEL ---
-  // Helper untuk menentukan status suhu (bisa kulkas atau ruang)
+  // Logika untuk menentukan status suhu
   (String, Color) _getTemperatureStatus(double temp) {
     // Kulkas (Optimal: 2-8°C)
     if (temp >= 2 && temp <= 8) {
@@ -41,7 +40,7 @@ class SensorCard extends StatelessWidget {
     }
   }
 
-  // Helper untuk menentukan status kelembaban (logika tetap sama)
+  // Logika untuk menentukan status kelembaban
   (String, Color) _getHumidityStatus(double humidity) {
     if (humidity >= 60 && humidity <= 80) {
       return ('Normal', Colors.green);
@@ -50,94 +49,81 @@ class SensorCard extends StatelessWidget {
     } else if (humidity < 40) {
       return ('Kering!', Colors.red.shade800);
     } else if (humidity > 80 && humidity <= 90) {
-      return ('Agak Basah', Colors.blue.shade700);
+      return ('Agak Lembab', Colors.blue.shade700);
     } else {
-      return ('Basah!', Colors.red.shade800);
+      return ('Terlalu Lembab!', Colors.red.shade800);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    String statusText;
-    Color statusColor;
-
-    // Tentukan status berdasarkan jenis sensor
-    if (title.toLowerCase().contains('suhu')) { // Deteksi berdasarkan judul
-      final (text, color) = _getTemperatureStatus(sensorValue);
-      statusText = text;
-      statusColor = color;
-    } else if (title.toLowerCase().contains('kelembapan')) {
-      final (text, color) = _getHumidityStatus(sensorValue);
-      statusText = text;
-      statusColor = color;
-    } else {
-      statusText = 'N/A';
-      statusColor = Colors.grey;
-    }
+    final (statusText, statusColor) = title.toLowerCase().contains('suhu')
+        ? _getTemperatureStatus(sensorValue)
+        : _getHumidityStatus(sensorValue);
 
     return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      // Menggunakan warna dari CardTheme yang sudah kita atur di main.dart
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.5)),
+      ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
+            // Baris Atas: Ikon dan Judul
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Icon(icon, size: 24, color: color),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                Icon(icon, size: 28, color: color),
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const Spacer(),
+            // Baris Tengah: Nilai Sensor
             RichText(
               text: TextSpan(
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
                 children: <TextSpan>[
                   TextSpan(text: value),
                   TextSpan(
                     text: ' $unit',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.normal,
-                    ),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.normal,
+                          color: Colors.grey[600],
+                        ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
+            // Baris Bawah: Status
             Row(
               children: [
                 Container(
-                  width: 8,
-                  height: 8,
+                  width: 10,
+                  height: 10,
                   decoration: BoxDecoration(
                     color: statusColor,
                     shape: BoxShape.circle,
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     statusText,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 14,
                       fontWeight: FontWeight.w500,
                       color: statusColor,
                     ),

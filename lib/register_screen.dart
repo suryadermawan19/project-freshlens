@@ -108,8 +108,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     const SizedBox(height: 8),
                     const Text('FreshLens', textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF4E5D49))),
                     const SizedBox(height: 40),
-                    const Text('Buat Akun Baru', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 24),
+                    const Text('Buat Akun Baru', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 15),
                     
                     TextFormField(
                       controller: _emailController,

@@ -153,10 +153,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 40),
                         const Text(
                           'Selamat Datang!',
+                          textAlign: TextAlign.left,
                           style:
-                              TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                              TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 15),
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
@@ -199,12 +200,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            _buildSocialButton(FontAwesomeIcons.facebook, () {}),
-                            const SizedBox(width: 16),
+                        
                             _buildSocialButton(
                                 FontAwesomeIcons.google, _signInWithGoogle),
                             const SizedBox(width: 16),
-                            _buildSocialButton(FontAwesomeIcons.apple, () {}),
+                            
                           ],
                         ),
                         const SizedBox(height: 32),
