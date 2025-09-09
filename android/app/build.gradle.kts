@@ -7,15 +7,15 @@ plugins {
 
 android {
     namespace = "com.example.freshlens_ai_app"
-    
-    
-    compileSdk = 35 // <-- Ubah dari 34 menjadi 35
-    
+    compileSdk = 35
     ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        
+        // --- TAMBAHAN 1: AKTIFKAN DESUGARING ---
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -39,4 +39,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+// --- TAMBAHAN 2: TAMBAHKAN DEPENDENSI DESUGARING ---
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }

@@ -8,224 +8,177 @@ import json
 import base64
 import time
 import tempfile
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, List
 
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-
-from firebase_functions import firestore_fn, https_fn, options, scheduler_fn
+from firebase_functions import scheduler_fn
+from firebase_functions import firestore_fn, https_fn, options
 from firebase_admin import initialize_app, storage, firestore
 
-# Cloud Vision (opsional)
 try:
     from google.cloud import vision
-except Exception:
+except ImportError:
     vision = None
-
 
 # ===============================
 # Konfigurasi Global
 # ===============================
+logging.basicConfig(level=logging.INFO)
 PROJECT_ID = os.getenv("GCP_PROJECT") or os.getenv("GCLOUD_PROJECT")
-
-# Ambil bucket dari FIREBASE_CONFIG (atau env), fallback ke <project>.appspot.com
 _FIREBASE_CONFIG = json.loads(os.environ.get("FIREBASE_CONFIG", "{}"))
 DEFAULT_BUCKET = (
     os.getenv("STORAGE_BUCKET")
     or _FIREBASE_CONFIG.get("storageBucket")
-    or f"{PROJECT_ID}.appspot.com"
+    or (f"{PROJECT_ID}.appspot.com" if PROJECT_ID else None)
 )
-
-# Ganti sesuai nama/path model di Storage
 MODEL_BLOB_PATH = "freshlens_model.json"
 
-# Region default
 options.set_global_options(region="asia-southeast2")
-
-# Init Admin + bucket default
 initialize_app(options={"storageBucket": DEFAULT_BUCKET})
 
-# Cache booster global (tanpa scikit-learn)
 _booster_cache: Optional[xgb.Booster] = None
 
-# Kolom fitur (SAMAKAN dengan saat training!)
+# --- SINKRONISASI DENGAN 26 FITUR DARI MODEL ---
 TRAINING_COLUMNS: List[str] = [
-    "avg_temp", "std_temp", "max_temp", "min_temp",
-    "avg_humid", "std_humid", "max_humid", "min_humid",
-    "durasi_observasi",
-    # One-hot item
-    "Nama_Item_Apel", "Nama_Item_Pisang", "Nama_Item_Mangga", "Nama_Item_Jeruk",
-    "Nama_Item_Anggur", "Nama_Item_Stroberi", "Nama_Item_Tomat", "Nama_Item_Alpukat",
+    "Hari_Ke", "Suhu (°C)", "Kelembapan (%)", "avg_temp", "std_temp", "max_temp",
+    "min_temp", "avg_humid", "std_humid", "max_humid", "min_humid",
+    "durasi_observasi", "Nama_Item_Alpukat", "Nama_Item_Anggur", "Nama_Item_Apel",
+    "Nama_Item_Jeruk", "Nama_Item_Mangga", "Nama_Item_Pisang", "Nama_Item_Stroberi",
+    "Nama_Item_Tomat", "Kondisi_Awal_Matang", "Kondisi_Awal_Mentah",
+    "Kondisi_Awal_Segar", "Kondisi_Awal_Setengah Matang", "Kondisi_Penyimpanan_Kulkas",
+    "Kondisi_Penyimpanan_Suhu Ruang"
 ]
 
-
 # ===============================
-# Helper: Loader Booster (tanpa sklearn) + retry
+# Helper: Loader Model
 # ===============================
 def _load_booster_if_needed() -> xgb.Booster:
-    """Download + load XGBoost Booster (JSON) dari Cloud Storage; cache di memori."""
     global _booster_cache
     if _booster_cache is not None:
         return _booster_cache
 
-    print(f"[ModelLoader] Bucket in use: {DEFAULT_BUCKET}")
-    print(f"[ModelLoader] Blob path   : {MODEL_BLOB_PATH}")
-
+    logging.info(f"[ModelLoader] Bucket: {DEFAULT_BUCKET}, Blob: {MODEL_BLOB_PATH}")
     bucket = storage.bucket(DEFAULT_BUCKET)
     blob = bucket.blob(MODEL_BLOB_PATH)
     if not blob.exists():
         raise FileNotFoundError(f"Model NOT FOUND at gs://{DEFAULT_BUCKET}/{MODEL_BLOB_PATH}")
 
-    last_err = None
+    last_err: Optional[Exception] = None
     for attempt in range(1, 4):
         try:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
                 tmp_path = tmp.name
-
             blob.download_to_filename(tmp_path)
-            size_bytes = os.path.getsize(tmp_path)
-            print(f"[ModelLoader] (try {attempt}) Downloaded -> {tmp_path} ({size_bytes} bytes)")
-
+            
             booster = xgb.Booster()
             booster.load_model(tmp_path)
-
-            try:
-                os.remove(tmp_path)
-            except Exception:
-                pass
-
+            
+            os.remove(tmp_path)
             _booster_cache = booster
-            print("[ModelLoader] Booster loaded successfully")
+            logging.info("[ModelLoader] Booster loaded successfully")
             return _booster_cache
         except Exception as e:
             last_err = e
-            print(f"[ModelLoader][WARN] Failed to load booster (try {attempt}): {e}")
+            logging.warning(f"[ModelLoader] Failed (try {attempt}): {e}")
             time.sleep(1.0)
-
     raise RuntimeError(f"Failed to load model after retries: {last_err}")
 
 
 # ===============================
 # Helper: Sensor & Feature Builder
 # ===============================
-def _get_latest_sensor(uid: str) -> Dict[str, float]:
-    """Ambil suhu/RH dari users/{uid}/sensor_data/latest; fallback default."""
+def _get_sensor_statistics(uid: str, hours: int = 24) -> Dict[str, float]:
     db = firestore.client()
-    doc = db.collection("users").document(uid).collection("sensor_data").document("latest").get()
-    if doc.exists:
+    now = datetime.now(timezone.utc)
+    start_time = now - timedelta(hours=hours)
+    
+    history_ref = db.collection("users").document(uid).collection("sensor_data").document("history").collection("entries")
+    query = history_ref.where("createdAt", ">=", start_time).stream()
+    
+    temps, humids = [], []
+    for doc in query:
         data = doc.to_dict() or {}
-        return {
-            "temperature": float(data.get("temperature", 25.0)),
-            "humidity": float(data.get("humidity", 80.0)),
-        }
-    return {"temperature": 25.0, "humidity": 80.0}
+        if data.get("temperature") is not None: temps.append(data["temperature"])
+        if data.get("humidity") is not None: humids.append(data["humidity"])
 
+    if not temps or not humids:
+        latest_doc = db.collection("users").document(uid).collection("sensor_data").document("latest").get()
+        if latest_doc.exists:
+            latest_data = latest_doc.to_dict() or {}
+            if not temps and latest_data.get("temperature") is not None: temps.append(latest_data["temperature"])
+            if not humids and latest_data.get("humidity") is not None: humids.append(latest_data["humidity"])
 
-_ITEM_KEYS = [
-    "Nama_Item_Apel", "Nama_Item_Pisang", "Nama_Item_Mangga", "Nama_Item_Jeruk",
-    "Nama_Item_Anggur", "Nama_Item_Stroberi", "Nama_Item_Tomat", "Nama_Item_Alpukat",
-]
-_COND_KEYS = [
-    "Kondisi_Awal_Matang", "Kondisi_Awal_Mentah", "Kondisi_Awal_Segar", "Kondisi_Awal_Setengah_Matang",
-]
+    if not temps: temps = [25.0]
+    if not humids: humids = [80.0]
 
-_ITEM_ALIASES = {
-    "apel": "Nama_Item_Apel",
-    "pisang": "Nama_Item_Pisang",
-    "mangga": "Nama_Item_Mangga",
-    "jeruk": "Nama_Item_Jeruk",
-    "anggur": "Nama_Item_Anggur",
-    "stroberi": "Nama_Item_Stroberi",
-    "strawberry": "Nama_Item_Stroberi",
-    "tomat": "Nama_Item_Tomat",
-    "alpukat": "Nama_Item_Alpukat",
-    "avocado": "Nama_Item_Alpukat",
-    "avokad": "Nama_Item_Alpukat",
-}
+    return {
+        'avg_temp': float(np.mean(temps)), 'std_temp': float(np.std(temps)),
+        'max_temp': float(np.max(temps)), 'min_temp': float(np.min(temps)),
+        'avg_humid': float(np.mean(humids)), 'std_humid': float(np.std(humids)),
+        'max_humid': float(np.max(humids)), 'min_humid': float(np.min(humids)),
+    }
 
-_COND_ALIASES = {
-    "matang": "Kondisi_Awal_Matang",
-    "mentah": "Kondisi_Awal_Mentah",
-    "segar": "Kondisi_Awal_Segar",
-    "setengah matang": "Kondisi_Awal_Setengah_Matang",
-    "setengah_matang": "Kondisi_Awal_Setengah_Matang",
-}
-
+_ITEM_ALIASES = { "alpukat": "Nama_Item_Alpukat", "anggur": "Nama_Item_Anggur", "apel": "Nama_Item_Apel", "jeruk": "Nama_Item_Jeruk", "mangga": "Nama_Item_Mangga", "pisang": "Nama_Item_Pisang", "stroberi": "Nama_Item_Stroberi", "tomat": "Nama_Item_Tomat" }
+_COND_ALIASES = { "matang": "Kondisi_Awal_Matang", "mentah": "Kondisi_Awal_Mentah", "segar": "Kondisi_Awal_Segar", "setengah matang": "Kondisi_Awal_Setengah Matang", "setengah_matang": "Kondisi_Awal_Setengah Matang" }
 
 def _one_hot(keys: List[str], selected_key: Optional[str]) -> Dict[str, int]:
     return {k: (1 if k == selected_key else 0) for k in keys}
 
-
-def _build_features_for_item(uid: str, item_doc: firestore.DocumentSnapshot) -> pd.DataFrame:
-    """Bangun feature vector: sensor terbaru, durasi hari, one-hot item & kondisi awal."""
-    data = item_doc.to_dict() or {}
-    raw_item = (data.get("itemName") or "").strip().lower()
-    raw_cond = (data.get("initialCondition") or "").strip().lower()
-
-    item_key = _ITEM_ALIASES.get(raw_item)  # bisa None
-    cond_key = _COND_ALIASES.get(raw_cond)
-
-    # Durasi (hari) sejak entryDate
-    entry_ts = data.get("entryDate")
+def _build_features_for_item(uid: str, item_doc_data: Dict) -> pd.DataFrame:
+    entry_ts = item_doc_data.get("entryDate")
     durasi_hari = 0.0
-    try:
-        if entry_ts is not None:
-            dt_entry = entry_ts.to_datetime() if hasattr(entry_ts, "to_datetime") else entry_ts
-            if isinstance(dt_entry, datetime):
-                durasi_hari = (datetime.now(timezone.utc) - dt_entry.replace(tzinfo=timezone.utc)).total_seconds() / 86400.0
-    except Exception:
-        pass
+    if entry_ts:
+        dt_entry = entry_ts if isinstance(entry_ts, datetime) else entry_ts.to_datetime()
+        durasi_hari = (datetime.now(timezone.utc) - dt_entry.replace(tzinfo=timezone.utc)).total_seconds() / 86400.0
 
-    s = _get_latest_sensor(uid)
-    t = float(s["temperature"])
-    h = float(s["humidity"])
-
-    base = {
-        "avg_temp": t, "std_temp": 0.0, "max_temp": t, "min_temp": t,
-        "avg_humid": h, "std_humid": 0.0, "max_humid": h, "min_humid": h,
-        "durasi_observasi": float(max(durasi_hari, 0.0)),
+    sensor_stats = _get_sensor_statistics(uid)
+    
+    base_features = {
+        "Hari_Ke": int(round(durasi_hari)),
+        "Suhu (°C)": sensor_stats['avg_temp'],
+        "Kelembapan (%)": sensor_stats['avg_humid'],
+        "durasi_observasi": durasi_hari,
+        **sensor_stats
     }
-    base.update(_one_hot(_ITEM_KEYS, item_key))
-    base.update(_one_hot(_COND_KEYS, cond_key))
 
-    row = {col: base.get(col, 0) for col in TRAINING_COLUMNS}
-    return pd.DataFrame([row])
+    raw_item = (item_doc_data.get("itemName") or "").strip().lower()
+    raw_cond = (item_doc_data.get("initialCondition") or "").strip().lower()
 
+    item_keys = [col for col in TRAINING_COLUMNS if col.startswith("Nama_Item_")]
+    cond_keys = [col for col in TRAINING_COLUMNS if col.startswith("Kondisi_Awal_")]
+    
+    base_features.update(_one_hot(item_keys, _ITEM_ALIASES.get(raw_item)))
+    base_features.update(_one_hot(cond_keys, _COND_ALIASES.get(raw_cond)))
+    
+    base_features["Kondisi_Penyimpanan_Kulkas"] = 0
+    base_features["Kondisi_Penyimpanan_Suhu Ruang"] = 1
+
+    return pd.DataFrame([base_features]).reindex(columns=TRAINING_COLUMNS, fill_value=0)
 
 def _predict_days(booster: xgb.Booster, df: pd.DataFrame) -> int:
-    """Prediksi hari dengan Booster.inplace_predict (tanpa sklearn)."""
-    # Pastikan urutan kolom sesuai
-    X = df[TRAINING_COLUMNS].to_numpy(dtype=np.float32, copy=False)
-    y = booster.inplace_predict(X)  # shape: (n_samples,)
-    pred_days = int(round(float(np.clip(y[0], 0, 365))))
-    return pred_days
+    X = df[TRAINING_COLUMNS].to_numpy(dtype=np.float32)
+    y = booster.inplace_predict(X)
+    return int(round(float(np.clip(y[0], 0, 365))))
 
 
 # ===============================
-# Callable: Cloud Vision label detection
+# Callable: Cloud Vision
 # ===============================
 @https_fn.on_call(memory=options.MemoryOption.MB_512)
 def annotate_image(req: https_fn.CallableRequest):
     if req.auth is None:
-        raise https_fn.HttpsError(
-            code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
-            message="Anda harus login."
-        )
+        raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.UNAUTHENTICATED, message="Anda harus login.")
     if vision is None:
-        raise https_fn.HttpsError(
-            code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
-            message="google-cloud-vision tidak terpasang di environment Functions."
-        )
+        raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION, message="google-cloud-vision tidak terpasang di environment Functions.")
 
     body = req.data or {}
     img_b64 = body.get("image")
     if not img_b64 or not isinstance(img_b64, str):
-        raise https_fn.HttpsError(
-            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-            message="Field 'image' (base64 string) wajib dikirim."
-        )
+        raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT, message="Field 'image' (base64 string) wajib dikirim.")
 
     try:
         if img_b64.startswith("data:"):
@@ -235,20 +188,14 @@ def annotate_image(req: https_fn.CallableRequest):
         raw_bytes = base64.b64decode(img_b64)
 
         if len(raw_bytes) > 6 * 1024 * 1024:
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-                message=f"Gambar terlalu besar ({len(raw_bytes)} B). Kompres/resize di client dulu."
-            )
+            raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT, message=f"Gambar terlalu besar ({len(raw_bytes)} B). Kompres/resize di client dulu.")
 
         client = vision.ImageAnnotatorClient()
         image = vision.Image(content=raw_bytes)
         response = client.label_detection(image=image, max_results=5)
 
         if response.error.message:
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
-                message=f"Vision error: {response.error.message}"
-            )
+            raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION, message=f"Vision error: {response.error.message}")
 
         labels = response.label_annotations or []
         top = labels[0].description if labels else "Tidak terdeteksi"
@@ -257,11 +204,8 @@ def annotate_image(req: https_fn.CallableRequest):
     except https_fn.HttpsError:
         raise
     except Exception as e:
-        print(f"[AnnotateImage][ERROR] {e}")
-        raise https_fn.HttpsError(
-            code=https_fn.FunctionsErrorCode.INTERNAL,
-            message=f"Gagal menganotasi gambar: {e}"
-        )
+        logging.exception("[AnnotateImage] ERROR")
+        raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.INTERNAL, message=f"Gagal menganotasi gambar: {e}")
 
 
 # ===============================
@@ -269,25 +213,16 @@ def annotate_image(req: https_fn.CallableRequest):
 # ===============================
 @firestore_fn.on_document_created(document="users/{uid}/items/{itemId}", memory=options.MemoryOption.MB_512)
 def predict_initial_shelflife(event: firestore_fn.Event[firestore.DocumentSnapshot]):
-    uid = event.params["uid"]
-    ref = event.data.reference
+    uid, ref = event.params["uid"], event.data.reference
     try:
         booster = _load_booster_if_needed()
-        df = _build_features_for_item(uid, event.data)
+        df = _build_features_for_item(uid, event.data.to_dict())
         pred_days = _predict_days(booster, df)
-
-        ref.update({
-            "predictedShelfLife": pred_days,
-            "predictionStatus": "ok",
-            "predictionUpdatedAt": firestore.SERVER_TIMESTAMP,
-        })
-        print(f"[PredictInitial] OK uid={uid} item={event.params['itemId']} days={pred_days}")
+        ref.update({"predictedShelfLife": pred_days, "predictionStatus": "ok", "predictionUpdatedAt": firestore.SERVER_TIMESTAMP})
+        logging.info(f"[PredictInitial] OK uid={uid} item={event.params['itemId']} days={pred_days}")
     except Exception as e:
-        print(f"[PredictInitial][ERROR] {e}")
-        ref.update({
-            "predictionStatus": f"error model load: {e}",
-            "predictionUpdatedAt": firestore.SERVER_TIMESTAMP,
-        })
+        logging.exception(f"[PredictInitial] ERROR for uid={uid}")
+        ref.update({"predictionStatus": f"error: {e}", "predictionUpdatedAt": firestore.SERVER_TIMESTAMP})
 
 
 # ===============================
@@ -305,11 +240,7 @@ def log_sensor_data_to_history(event: firestore_fn.Event[firestore.DocumentSnaps
     humidity = float(data.get("humidity", 80.0))
 
     db = firestore.client()
-    history_entries = (
-        db.collection("users").document(uid)
-        .collection("sensor_data").document("history")
-        .collection("entries")
-    )
+    history_entries = db.collection("users").document(uid).collection("sensor_data").document("history").collection("entries")
     history_entries.add({
         "temperature": temperature,
         "humidity": humidity,
@@ -317,12 +248,8 @@ def log_sensor_data_to_history(event: firestore_fn.Event[firestore.DocumentSnaps
         "createdAt": firestore.SERVER_TIMESTAMP,
     })
 
-    # Optional: trim history agar hemat
     try:
-        old = (
-            history_entries.order_by("createdAt", direction=firestore.Query.DESCENDING)
-            .offset(1000).limit(100).stream()
-        )
+        old = history_entries.order_by("createdAt", direction=firestore.Query.DESCENDING).offset(1000).limit(100).stream()
         batch = db.batch()
         cnt = 0
         for doc in old:
@@ -331,16 +258,27 @@ def log_sensor_data_to_history(event: firestore_fn.Event[firestore.DocumentSnaps
         if cnt:
             batch.commit()
     except Exception as e:
-        print(f"[SensorHistory][WARN] trim failed: {e}")
+        logging.warning(f"[SensorHistory] trim failed: {e}")
 
 
 # ===============================
-# Trigger: Re-predict saat sensor latest berubah
+# Trigger: Re-predict saat sensor berubah
 # ===============================
 @firestore_fn.on_document_updated(document="users/{uid}/sensor_data/latest", memory=options.MemoryOption.MB_512)
 def on_sensor_data_update_and_repredict(event: firestore_fn.Event[firestore.DocumentSnapshot]):
     uid = event.params["uid"]
     try:
+        before, after = {}, {}
+        try:
+            before = event.data.before.to_dict() or {}
+            after = event.data.after.to_dict() or {}
+        except AttributeError:
+            after = event.data.to_dict() or {}
+
+        if before and after and before.get("temperature") == after.get("temperature") and before.get("humidity") == after.get("humidity"):
+            logging.info("[RePredictOnSensor] No sensor change; skip recompute.")
+            return
+
         booster = _load_booster_if_needed()
         db = firestore.client()
         items_ref = db.collection("users").document(uid).collection("items")
@@ -348,7 +286,7 @@ def on_sensor_data_update_and_repredict(event: firestore_fn.Event[firestore.Docu
         total_updated = 0
         for item in items_ref.stream():
             try:
-                df = _build_features_for_item(uid, item)
+                df = _build_features_for_item(uid, item.to_dict())
                 pred_days = _predict_days(booster, df)
                 item.reference.update({
                     "predictedShelfLife": pred_days,
@@ -358,14 +296,14 @@ def on_sensor_data_update_and_repredict(event: firestore_fn.Event[firestore.Docu
                 total_updated += 1
             except Exception as ie:
                 item.reference.update({
-                    "predictionStatus": f"error model load: {ie}",
+                    "predictionStatus": f"error: {ie}",
                     "predictionUpdatedAt": firestore.SERVER_TIMESTAMP,
                 })
-                print(f"[RePredictOnSensor][ITEM ERROR] uid={uid} item={item.id} err={ie}")
+                logging.warning(f"[RePredictOnSensor][ITEM] uid={uid} item={item.id} err={ie}")
 
-        print(f"[RePredictOnSensor] uid={uid} updated items: {total_updated}")
+        logging.info(f"[RePredictOnSensor] uid={uid} updated items: {total_updated}")
     except Exception as e:
-        print(f"[RePredictOnSensor][FATAL] {e}")
+        logging.exception("[RePredictOnSensor][FATAL]")
 
 
 # ===============================
@@ -391,7 +329,7 @@ def update_all_shelflives(event: scheduler_fn.ScheduledEvent):
 
             for item in candidates:
                 try:
-                    df = _build_features_for_item(uid, item)
+                    df = _build_features_for_item(uid, item.to_dict())
                     pred_days = _predict_days(booster, df)
                     item.reference.update({
                         "predictedShelfLife": pred_days,
@@ -401,11 +339,42 @@ def update_all_shelflives(event: scheduler_fn.ScheduledEvent):
                     total_updated += 1
                 except Exception as ie:
                     item.reference.update({
-                        "predictionStatus": f"error model load: {ie}",
+                        "predictionStatus": f"error: {ie}",
                         "predictionUpdatedAt": firestore.SERVER_TIMESTAMP,
                     })
-                    print(f"[UpdateAll][ITEM ERROR] uid={uid} item={item.id} err={ie}")
+                    logging.warning(f"[UpdateAll][ITEM] uid={uid} item={item.id} err={ie}")
 
-        print(f"[UpdateAll] Done. Updated items: {total_updated}")
+        logging.info(f"[UpdateAll] Done. Updated items: {total_updated}")
     except Exception as e:
-        print(f"[UpdateAll][FATAL] {e}")
+        logging.exception("[UpdateAll][FATAL]")
+
+
+# ===============================
+# Scheduler: Recalc harian pukul 00:00 WIB
+# ===============================
+@scheduler_fn.on_schedule(schedule="0 0 * * *", timezone="Asia/Jakarta", memory=options.MemoryOption.MB_512)
+def daily_shelflife_recalculation(event: scheduler_fn.ScheduledEvent):
+    logging.info(f"Fungsi terjadwal harian berjalan: {event.timestamp}")
+    db = firestore.client()
+    try:
+        booster = _load_booster_if_needed()
+        users = db.collection("users").stream()
+        total_updated = 0
+        for user in users:
+            uid = user.id
+            items_ref = db.collection("users").document(uid).collection("items")
+            for item in items_ref.stream():
+                try:
+                    df = _build_features_for_item(uid, item.to_dict())
+                    pred_days = _predict_days(booster, df)
+                    item.reference.update({
+                        "predictedShelfLife": pred_days,
+                        "predictionStatus": "repredicted_daily",
+                        "predictionUpdatedAt": firestore.SERVER_TIMESTAMP,
+                    })
+                    total_updated += 1
+                except Exception as ie:
+                    logging.error(f"[DailyRecalc][ITEM] uid={uid} item={item.id} err={ie}")
+        logging.info(f"[DailyRecalc] Selesai. Total item diperbarui: {total_updated}")
+    except Exception as e:
+        logging.critical(f"[DailyRecalc][FATAL] {e}")
