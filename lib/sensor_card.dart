@@ -21,7 +21,6 @@ class SensorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      // Mengambil style dari CardTheme di main.dart
       elevation: 1,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -32,10 +31,14 @@ class SensorCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                // [DIUBAH] Bungkus dengan Expanded agar fleksibel
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                    overflow: TextOverflow.ellipsis, // Cegah teks meluber
                   ),
                 ),
                 Icon(icon, color: color, size: 28),
@@ -48,9 +51,9 @@ class SensorCard extends StatelessWidget {
                 Text(
                   value,
                   style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w800,
-                  ),
+                        color: color,
+                        fontWeight: FontWeight.w800,
+                      ),
                 ),
                 Padding(
                   padding: const EdgeInsets.only(top: 4.0, left: 2.0),

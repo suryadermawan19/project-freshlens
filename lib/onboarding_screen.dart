@@ -33,7 +33,7 @@ class OnboardingScreen extends StatelessWidget {
             left: 0,
             right: 0,
             child: Image.asset(
-              'assets/images/onboarding_illustration.png', // Ganti dengan path ilustrasi gelombang Anda
+              'assets/images/welcome_background.png', // Ganti dengan path ilustrasi gelombang Anda
               fit: BoxFit.cover, // Menutupi lebar
               alignment: Alignment.bottomCenter,
             ),
@@ -54,7 +54,7 @@ class OnboardingScreen extends StatelessWidget {
                     width: 150, // Ukuran logo yang lebih besar
                     height: 150,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 15),
                   
                   // [BARU] Nama Aplikasi
                   Text(
@@ -113,6 +113,7 @@ class OnboardingScreen extends StatelessWidget {
                         foregroundColor: Theme.of(context).primaryColor,
                       ),
                       child: const Text('DAFTAR'),
+
                     ),
                   ),
                   const Spacer(), // Sedikit ruang di bawah tombol

@@ -8,11 +8,15 @@ import 'package:freshlens_ai_app/models/inventory_item_model.dart';
 import 'package:freshlens_ai_app/service/firestore_service.dart';
 import 'package:freshlens_ai_app/widgets/inventory_preview_card.dart';
 import 'package:freshlens_ai_app/sensor_card.dart';
+import 'package:freshlens_ai_app/widgets/shimmer_box.dart';
 import 'package:freshlens_ai_app/urgent_item_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shimmer/shimmer.dart';
 
 class HomeContent extends StatefulWidget {
-  const HomeContent({super.key});
+  final VoidCallback onViewAllTapped;
+
+  const HomeContent({super.key, required this.onViewAllTapped});
 
   @override
   State<HomeContent> createState() => _HomeContentState();
@@ -70,8 +74,8 @@ class _HomeContentState extends State<HomeContent> {
     return StreamBuilder<QuerySnapshot>(
       stream: _firestoreService.getInventoryItems(),
       builder: (context, inventorySnapshot) {
-        if (inventorySnapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+        if (inventorySnapshot.connectionState == ConnectionState.waiting || !inventorySnapshot.hasData) {
+          return _buildShimmerLoadingState();
         }
 
         final allDocs = inventorySnapshot.data?.docs ?? [];
@@ -106,12 +110,87 @@ class _HomeContentState extends State<HomeContent> {
     );
   }
 
+  Widget _buildShimmerLoadingState() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[300]!,
+      highlightColor: Colors.grey[100]!,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24.0),
+            child: Row(
+              children: [
+                ShimmerBox(width: 56, height: 56, shapeBorder: CircleBorder()),
+                SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ShimmerBox(width: 150, height: 20),
+                    SizedBox(height: 8),
+                    ShimmerBox(width: 120, height: 14),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24.0),
+            child: Row(
+              children: [
+                Expanded(child: ShimmerBox(width: double.infinity, height: 130, shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))))),
+                SizedBox(width: 16),
+                Expanded(child: ShimmerBox(width: double.infinity, height: 130, shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))))),
+              ],
+            ),
+          ),
+          const SizedBox(height: 32),
+           const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24.0),
+            child: ShimmerBox(width: 200, height: 24),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 220,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: 3,
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              itemBuilder: (context, index) => const Padding(
+                padding: EdgeInsets.only(right: 16.0),
+                child: ShimmerBox(width: 150, height: 220, shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))))
+              ),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
       child: StreamBuilder<DocumentSnapshot>(
         stream: _firestoreService.getUserProfile(),
         builder: (context, userSnapshot) {
+          if (!userSnapshot.hasData) {
+            return const Row(
+              children: [
+                ShimmerBox(width: 56, height: 56, shapeBorder: CircleBorder()),
+                SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ShimmerBox(width: 150, height: 20),
+                    SizedBox(height: 8),
+                    ShimmerBox(width: 120, height: 14),
+                  ],
+                ),
+              ],
+            );
+          }
+
           final name = (userSnapshot.hasData && userSnapshot.data!.exists)
               ? (userSnapshot.data!.data() as Map<String, dynamic>)['name'] as String? ?? 'Pengguna'
               : 'Pengguna';
@@ -153,6 +232,15 @@ class _HomeContentState extends State<HomeContent> {
       child: StreamBuilder<DocumentSnapshot>(
         stream: _firestoreService.getLatestSensorData(),
         builder: (context, sensorSnapshot) {
+          if (!sensorSnapshot.hasData) {
+            return const Row(
+              children: [
+                Expanded(child: ShimmerBox(width: double.infinity, height: 130, shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))))),
+                SizedBox(width: 16),
+                Expanded(child: ShimmerBox(width: double.infinity, height: 130, shapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))))),
+              ],
+            );
+          }
           final temp = (sensorSnapshot.hasData && sensorSnapshot.data!.exists)
               ? (sensorSnapshot.data!.data() as Map<String, dynamic>)['temperature']?.toStringAsFixed(1) ?? 'N/A'
               : 'N/A';
@@ -184,9 +272,7 @@ class _HomeContentState extends State<HomeContent> {
           Text(title, style: Theme.of(context).textTheme.headlineSmall),
           if (showViewAll)
             TextButton(
-              onPressed: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const InventoryScreen()));
-              },
+              onPressed: widget.onViewAllTapped,
               child: const Text('Lihat semua'),
             ),
         ],
@@ -214,10 +300,20 @@ class _HomeContentState extends State<HomeContent> {
           final shortestDays = itemGroup.batches.map((b) => b.predictedShelfLife).reduce((a, b) => a < b ? a : b);
           return Padding(
             padding: const EdgeInsets.only(right: 16.0),
-            child: UrgentItemCard(
-              imageUrl: itemGroup.imagePath,
-              itemName: itemGroup.itemName,
-              daysLeft: shortestDays,
+            child: GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ItemDetailScreen(itemGroup: itemGroup),
+                  ),
+                );
+              },
+              child: UrgentItemCard(
+                imageUrl: itemGroup.imagePath,
+                itemName: itemGroup.itemName,
+                daysLeft: shortestDays,
+              ),
             ),
           );
         },

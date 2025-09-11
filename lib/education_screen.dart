@@ -53,6 +53,7 @@ class _EducationScreenState extends State<EducationScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edukasi'),
+        automaticallyImplyLeading: false,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16.0),

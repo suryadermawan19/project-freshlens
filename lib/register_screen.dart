@@ -104,7 +104,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               height: 300,
               decoration: BoxDecoration(
                 color: Theme.of(context).primaryColor.withValues(alpha: 0.15),
-
+                shape: BoxShape.circle,
               ),
             ),
           ),

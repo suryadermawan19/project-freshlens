@@ -529,3 +529,162 @@ def check_expiring_items(event: scheduler_fn.ScheduledEvent) -> None:
 
     except Exception as e:
         logging.error(f"[FCM] Error saat query/pengiriman notifikasi: {e}")
+    
+# Di dalam functions/main.py
+
+# ... (kode import dan fungsi notifikasi yang sudah ada) ...
+
+# ===============================
+# Cloud Function: Registrasi Perangkat IoT
+# ===============================
+@https_fn.on_call(region="asia-southeast2")
+def registerDevice(req: https_fn.CallableRequest) -> Dict[str, any]:
+    """
+    Menghubungkan perangkat IoT ke akun pengguna yang sedang login.
+    Menerima deviceId dari aplikasi Flutter.
+    """
+    db = firestore.client()
+    if not req.auth:
+        raise https_fn.HttpsError(code="unauthenticated", message="Anda harus login untuk mendaftarkan perangkat.")
+
+    uid = req.auth.uid
+    device_id = req.data.get("deviceId")
+
+    if not device_id:
+        raise https_fn.HttpsError(code="invalid-argument", message="deviceId tidak boleh kosong.")
+
+    logging.info(f"User '{uid}' mencoba mendaftarkan perangkat '{device_id}'")
+    
+    device_ref = db.collection('iot_devices').document(device_id)
+    user_ref = db.collection('users').document(uid)
+
+    try:
+        device_doc = device_ref.get()
+        if not device_doc.exists:
+            raise https_fn.HttpsError(code="not-found", message="Perangkat dengan ID ini tidak ditemukan.")
+
+        device_data = device_doc.to_dict()
+        if device_data.get('ownerUid') is not None:
+            raise https_fn.HttpsError(code="already-exists", message="Perangkat ini sudah terhubung dengan akun lain.")
+
+        # Lakukan update secara transaksional untuk keamanan
+        @firestore.transactional
+        def update_in_transaction(transaction, device_ref, user_ref):
+            transaction.update(device_ref, {
+                'ownerUid': uid,
+                'status': 'active'
+            })
+            transaction.update(user_ref, {
+                'linkedDeviceId': device_id
+            })
+        
+        transaction = db.transaction()
+        update_in_transaction(transaction, device_ref, user_ref)
+        
+        logging.info(f"Perangkat '{device_id}' berhasil terhubung dengan user '{uid}'")
+        return {"status": "success", "message": "Perangkat berhasil terhubung!"}
+
+    except Exception as e:
+        logging.error(f"Gagal mendaftarkan perangkat '{device_id}': {e}")
+        raise https_fn.HttpsError(code="internal", message=f"Terjadi kesalahan: {e}")
+
+
+# ===============================
+# Cloud Function: Menerima Data Sensor IoT
+# ===============================
+@https_fn.on_request(region="asia-southeast2")
+def ingestSensorData(req: https_fn.Request) -> https_fn.Response:
+    """
+    Endpoint HTTP untuk menerima data dari perangkat ESP32.
+    """
+    db = firestore.client()
+
+    if req.method != "POST":
+        return https_fn.Response("Metode tidak diizinkan", status=405)
+    
+    try:
+        data = req.get_json()
+        device_id = data.get("deviceId")
+        temperature = data.get("temperature")
+        humidity = data.get("humidity")
+
+        if not device_id or temperature is None or humidity is None:
+            return https_fn.Response("Data tidak lengkap: deviceId, temperature, dan humidity wajib diisi.", status=400)
+
+        logging.info(f"Menerima data dari perangkat '{device_id}': Temp={temperature}, Humid={humidity}")
+
+        device_ref = db.collection('iot_devices').document(device_id)
+        device_doc = device_ref.get()
+
+        if not device_doc.exists:
+            return https_fn.Response("Perangkat tidak terdaftar.", status=404)
+        
+        owner_uid = device_doc.to_dict().get('ownerUid')
+
+        if not owner_uid:
+            return https_fn.Response("Perangkat belum terhubung dengan pengguna.", status=403)
+            
+        # Simpan data sensor ke path pengguna yang benar
+        sensor_latest_ref = db.collection('users').document(owner_uid).collection('sensor_data').document('latest')
+        sensor_latest_ref.set({
+            'temperature': float(temperature),
+            'humidity': float(humidity),
+            'lastUpdate': firestore.SERVER_TIMESTAMP
+        })
+        
+        return https_fn.Response("Data berhasil diterima.", status=200)
+
+    except Exception as e:
+        logging.error(f"Error saat memproses data sensor: {e}")
+        return https_fn.Response("Terjadi kesalahan internal.", status=500)
+
+@https_fn.on_call(region="asia-southeast2")
+def unregisterDevice(req: https_fn.CallableRequest) -> Dict[str, any]:
+    """
+    Memutuskan hubungan perangkat IoT dari akun pengguna yang sedang login.
+    """
+    if not req.auth:
+        raise https_fn.HttpsError(code="unauthenticated", message="Anda harus login untuk melakukan aksi ini.")
+
+    uid = req.auth.uid
+    db = firestore.client()
+    logging.info(f"User '{uid}' mencoba memutuskan hubungan perangkat.")
+    
+    user_ref = db.collection('users').document(uid)
+
+    try:
+        user_doc = user_ref.get()
+        if not user_doc.exists:
+            raise https_fn.HttpsError(code="not-found", message="Profil pengguna tidak ditemukan.")
+
+        user_data = user_doc.to_dict()
+        device_id = user_data.get('linkedDeviceId')
+
+        if not device_id:
+            raise https_fn.HttpsError(code="failed-precondition", message="Tidak ada perangkat yang terhubung dengan akun ini.")
+
+        device_ref = db.collection('iot_devices').document(device_id)
+
+        # Lakukan update secara transaksional
+        @firestore.transactional
+        def update_in_transaction(transaction, device_ref, user_ref):
+            # 1. Hapus hubungan di dokumen perangkat
+            transaction.update(device_ref, {
+                'ownerUid': None, # Set kembali ke null
+                'status': 'unclaimed'
+            })
+            # 2. Hapus hubungan di dokumen pengguna
+            transaction.update(user_ref, {
+                'linkedDeviceId': firestore.DELETE_FIELD
+            })
+        
+        transaction = db.transaction()
+        update_in_transaction(transaction, device_ref, user_ref)
+        
+        logging.info(f"Perangkat '{device_id}' berhasil diputuskan dari user '{uid}'")
+        return {"status": "success", "message": "Perangkat berhasil diputuskan!"}
+
+    except Exception as e:
+        logging.error(f"Gagal memutuskan perangkat untuk user '{uid}': {e}")
+        raise https_fn.HttpsError(code="internal", message=f"Terjadi kesalahan: {e}")
+

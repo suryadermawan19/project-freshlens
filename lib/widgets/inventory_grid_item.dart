@@ -13,36 +13,24 @@ class InventoryGridItem extends StatelessWidget {
     required this.onTap,
   });
 
-  // Helper untuk menentukan status berdasarkan hari terpendek
   String getStatusForDays(int days) {
     if (days <= 2) return 'Kritis';
     if (days <= 4) return 'Segera Olah';
     return 'Segar';
   }
 
-  // Helper untuk menentukan warna chip status
   Color getColorForStatus(String status) {
     switch (status) {
-      case 'Kritis':
-        return Colors.red.shade400;
-      case 'Segera Olah':
-        return Colors.orange.shade400;
-      case 'Segar':
-      default:
-        return Colors.green.shade400;
+      case 'Kritis': return Colors.red.shade400;
+      case 'Segera Olah': return Colors.orange.shade400;
+      default: return Colors.green.shade400;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Hitung sisa hari terpendek dan total kuantitas dari semua batch
-    final shortestDays = itemGroup.batches
-        .map((b) => b.predictedShelfLife)
-        .reduce((a, b) => a < b ? a : b);
-    final totalQuantity = itemGroup.batches
-        .map((b) => b.quantity)
-        .reduce((a, b) => a + b);
-    
+    final shortestDays = itemGroup.batches.map((b) => b.predictedShelfLife).reduce((a, b) => a < b ? a : b);
+    final totalQuantity = itemGroup.batches.map((b) => b.quantity).reduce((a, b) => a + b);
     final status = getStatusForDays(shortestDays);
     final statusColor = getColorForStatus(status);
 
@@ -53,24 +41,19 @@ class InventoryGridItem extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Gambar Item
             Expanded(
-              child: Image.network( // Menggunakan Image.network untuk URL dari Firebase
+              child: Image.network(
                 itemGroup.imagePath,
                 fit: BoxFit.cover,
-                // Tampilkan loading indicator saat gambar dimuat
                 loadingBuilder: (context, child, loadingProgress) {
                   if (loadingProgress == null) return child;
                   return const Center(child: CircularProgressIndicator(strokeWidth: 2));
                 },
-                // Tampilkan ikon error jika gambar gagal dimuat
                 errorBuilder: (context, error, stackTrace) {
                   return const Center(child: Icon(Icons.image_not_supported_outlined, color: Colors.grey));
                 },
               ),
             ),
-
-            // Informasi Item
             Padding(
               padding: const EdgeInsets.all(12.0),
               child: Column(
@@ -86,11 +69,15 @@ class InventoryGridItem extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Total Kuantitas
-                      Text(
-                        'Jumlah: $totalQuantity',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                      // [DIUBAH] Bungkus dengan Expanded agar fleksibel
+                      Expanded(
+                        child: Text(
+                          'Jumlah: $totalQuantity',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                          overflow: TextOverflow.ellipsis, // Cegah teks meluber
+                        ),
                       ),
+                      const SizedBox(width: 4), // Beri sedikit jarak
                       // Chip Status Kesegaran
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

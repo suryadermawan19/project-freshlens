@@ -36,6 +36,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profil Saya'),
+        automaticallyImplyLeading: false,
       ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: _firestoreService.getUserProfile(),
