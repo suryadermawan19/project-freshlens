@@ -22,7 +22,6 @@ class FirestoreService {
   String get _uid => _currentUser.uid;
 
   // --- FUNGSI PROFIL PENGGUNA ---
-  // (Tidak ada perubahan di sini)
   Future<void> createUserProfile({
     required String name,
     required int age,
@@ -37,6 +36,7 @@ class FirestoreService {
       'createdAt': FieldValue.serverTimestamp(),
       'savedFoodCount': 0,
       'moneySaved': 0.0,
+      'fcmToken': null, // Tambahkan field fcmToken saat profil dibuat
     });
   }
 
@@ -57,7 +57,6 @@ class FirestoreService {
   }
 
   // --- FUNGSI AKUN & KEAMANAN ---
-  // (Tidak ada perubahan di sini)
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
@@ -75,15 +74,12 @@ class FirestoreService {
     await _currentUser.delete();
   }
 
-  // --- FUNGSI SENSOR DATA BARU ---
-  /// Mendengarkan data sensor terbaru secara real-time dari dokumen 'latest'.
+  // --- FUNGSI SENSOR DATA ---
   Stream<DocumentSnapshot> getLatestSensorData() {
     return _db.collection('users').doc(_uid).collection('sensor_data').doc('latest').snapshots();
   }
 
-
   // --- FUNGSI MANAJEMEN INVENTARIS ---
-  // (Tidak ada perubahan di sini)
   Stream<QuerySnapshot> getInventoryItems() {
     return _db
         .collection('users')
@@ -141,5 +137,32 @@ class FirestoreService {
 
   Future<void> updateItem(String itemId, Map<String, dynamic> data) async {
     await _db.collection('users').doc(_uid).collection('items').doc(itemId).update(data);
+  }
+
+  // --- FUNGSI NOTIFIKASI ---
+  /// Menyimpan atau memperbarui FCM token pengguna
+  Future<void> saveUserToken(String? token) async {
+    if (token == null) return;
+    try {
+      await _db.collection('users').doc(_uid).update({
+        'fcmToken': token,
+      });
+    } catch (e) {
+      // Handle error jika diperlukan, misalnya jika pengguna belum melengkapi profil
+      // dan dokumennya belum ada.
+      if (e is FirebaseException && e.code == 'not-found') {
+        print('Dokumen pengguna belum ada, token akan disimpan saat profil dibuat.');
+      } else {
+        print('Gagal menyimpan token: $e');
+      }
+    }
+  }
+
+  // --- FUNGSI MANAJEMEN EDUKASI ---
+  Stream<QuerySnapshot> getArticles() {
+    return _db
+        .collection('articles')
+        .orderBy('timestamp', descending: true)
+        .snapshots();
   }
 }

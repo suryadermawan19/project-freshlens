@@ -1,35 +1,52 @@
 // lib/create_profile_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:freshlens_ai_app/dashboard_screen.dart';
+import 'package:freshlens_ai_app/providers/loading_provider.dart';
 import 'package:freshlens_ai_app/service/firestore_service.dart';
-import 'dashboard_screen.dart';
+import 'package:provider/provider.dart';
 
 class CreateProfileScreen extends StatefulWidget {
-  const CreateProfileScreen({super.key});
+  final String name;
+
+  const CreateProfileScreen({super.key, required this.name});
 
   @override
   State<CreateProfileScreen> createState() => _CreateProfileScreenState();
 }
 
 class _CreateProfileScreenState extends State<CreateProfileScreen> {
+  late final TextEditingController _nameController;
+  final TextEditingController _ageController = TextEditingController();
+  final TextEditingController _occupationController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _ageController = TextEditingController();
-  final _occupationController = TextEditingController();
   
-  final _firestoreService = FirestoreService();
-  bool _isLoading = false;
+  final FirestoreService _firestoreService = FirestoreService();
 
-  Future<void> _submitProfile() async {
-    // Validasi form terlebih dahulu
+  @override
+  void initState() {
+    super.initState();
+    // Isi otomatis nama dari halaman registrasi
+    _nameController = TextEditingController(text: widget.name);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _ageController.dispose();
+    _occupationController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveProfileAndContinue() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    setState(() => _isLoading = true);
+    final loadingProvider = Provider.of<LoadingProvider>(context, listen: false);
+    loadingProvider.startLoading();
 
     try {
-      // Panggil service untuk membuat profil di Firestore
       await _firestoreService.createUserProfile(
         name: _nameController.text.trim(),
         age: int.parse(_ageController.text.trim()),
@@ -37,7 +54,6 @@ class _CreateProfileScreenState extends State<CreateProfileScreen> {
       );
 
       if (mounted) {
-        // Arahkan ke dasbor dan hapus semua rute sebelumnya (login/register/create profile)
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => const DashboardScreen()),
@@ -51,123 +67,93 @@ class _CreateProfileScreenState extends State<CreateProfileScreen> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      loadingProvider.stopLoading();
     }
   }
 
   @override
-  void dispose() {
-    _nameController.dispose();
-    _ageController.dispose();
-    _occupationController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF8F1),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(height: size.height * 0.1),
-                  const Icon(Icons.person_add_alt_1_outlined, size: 80, color: Color(0xFF5D8A41)),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Satu Langkah Lagi!',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF4E5D49)),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Lengkapi profil Anda untuk memulai.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 40),
-                  
-                  // Form Input Nama
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: _buildInputDecoration('Nama Lengkap', Icons.person_outline),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Nama tidak boleh kosong';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
+      appBar: AppBar(
+        title: const Text('Lengkapi Profil Anda'),
+        automaticallyImplyLeading: false, // Sembunyikan tombol kembali
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Satu langkah lagi!',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Bantu kami mengenal Anda lebih baik untuk memberikan pengalaman yang lebih personal.',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 40),
 
-                  // Form Input Umur
-                  TextFormField(
-                    controller: _ageController,
-                    keyboardType: TextInputType.number,
-                    decoration: _buildInputDecoration('Umur', Icons.cake_outlined),
-                     validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Umur tidak boleh kosong';
-                      }
-                      if (int.tryParse(value) == null) {
-                        return 'Masukkan angka yang valid';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
+              // Form Nama
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: 'Nama Lengkap'),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Nama tidak boleh kosong';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
 
-                  // Form Input Pekerjaan
-                  TextFormField(
-                    controller: _occupationController,
-                    decoration: _buildInputDecoration('Pekerjaan', Icons.work_outline),
-                     validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Pekerjaan tidak boleh kosong';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 40),
+              // Form Usia
+              TextFormField(
+                controller: _ageController,
+                decoration: const InputDecoration(labelText: 'Usia'),
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Usia tidak boleh kosong';
+                  }
+                  if (int.tryParse(value) == null) {
+                    return 'Masukkan angka yang valid';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
 
-                  // Tombol Submit
-                  _isLoading
+              // Form Pekerjaan
+              TextFormField(
+                controller: _occupationController,
+                decoration: const InputDecoration(labelText: 'Pekerjaan'),
+                 validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Pekerjaan tidak boleh kosong';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 40),
+
+              // Tombol Simpan
+              Consumer<LoadingProvider>(
+                builder: (context, loadingProvider, child) {
+                  return loadingProvider.isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : ElevatedButton(
-                          onPressed: _submitProfile,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF5D8A41),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          ),
-                          child: const Text('SIMPAN & MULAI', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                        ),
-                ],
+                          onPressed: _saveProfileAndContinue,
+                          child: const Text('SIMPAN & MULAI'),
+                        );
+                },
               ),
-            ),
+            ],
           ),
         ),
       ),
-    );
-  }
-
-  InputDecoration _buildInputDecoration(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon),
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.grey.shade300)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.grey.shade300)),
     );
   }
 }

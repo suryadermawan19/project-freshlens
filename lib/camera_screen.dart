@@ -1,10 +1,11 @@
-// lib/camera_screen.dart (Cloud Vision → langsung ke ConfirmItemScreen)
+// lib/camera_screen.dart
+
 import 'dart:convert';
 import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'confirm_item_screen.dart';
+import 'package:freshlens_ai_app/confirm_item_screen.dart'; // Halaman berikutnya
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -15,24 +16,27 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen> {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
-  bool _busy = false;
+  bool _isBusy = false;
 
-  // pakai region Jakarta biar gak NOT_FOUND
+  // Pastikan region sudah benar
   final FirebaseFunctions _functions =
       FirebaseFunctions.instanceFor(region: 'asia-southeast2');
 
   @override
   void initState() {
     super.initState();
-    _initCamera();
+    _initializeCamera();
   }
 
-  Future<void> _initCamera() async {
+  Future<void> _initializeCamera() async {
     try {
       _cameras = await availableCameras();
+      if (_cameras == null || _cameras!.isEmpty) {
+        throw Exception('No camera found on this device.');
+      }
       _controller = CameraController(
         _cameras!.first,
-        ResolutionPreset.medium,
+        ResolutionPreset.high,
         enableAudio: false,
       );
       await _controller!.initialize();
@@ -46,45 +50,45 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _scanAndConfirm() async {
-    if (_controller == null || !_controller!.value.isInitialized || _busy) return;
+    if (_controller == null || !_controller!.value.isInitialized || _isBusy) return;
 
-    setState(() => _busy = true);
-    // simpan navigator supaya aman dari use_build_context_synchronously
+    setState(() => _isBusy = true);
     final navigator = Navigator.of(context);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     try {
-      // 1) Ambil foto
+      // 1. Ambil gambar
       final picture = await _controller!.takePicture();
       final imagePath = picture.path;
 
-      // 2) Base64 (bisa di-compress/resize dulu kalau perlu)
+      // 2. Encode gambar ke Base64
       final bytes = await File(imagePath).readAsBytes();
-      final b64 = base64Encode(bytes);
+      final base64Image = base64Encode(bytes);
 
-      // 3) Panggil Cloud Function annotate_image
+      // 3. Panggil Cloud Function untuk deteksi objek
       final callable = _functions.httpsCallable('annotate_image');
-      final resp = await callable.call(<String, dynamic>{'image': b64});
+      final response = await callable.call(<String, dynamic>{'image': base64Image});
 
-      final label = (resp.data is Map && resp.data['label'] != null)
-          ? resp.data['label'].toString()
-          : 'Tidak terdeteksi';
+      // Ambil label dari response, default ke 'Tidak Dikenali'
+      final detectedLabel = (response.data is Map && response.data['label'] != null)
+          ? response.data['label'].toString()
+          : 'Tidak Dikenali';
 
-      // 4) Langsung pindah ke ConfirmItemScreen sambil bawa foto + label
-      navigator.pushReplacement(
+      // 4. Navigasi ke halaman konfirmasi
+      await navigator.pushReplacement(
         MaterialPageRoute(
           builder: (context) => ConfirmItemScreen(
             imagePath: imagePath,
-            detectedItemName: label, // mis: "Apple", "Orange", dll.
+            detectedItemName: detectedLabel,
           ),
         ),
       );
     } catch (e) {
       scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('Gagal scan: $e')),
+        SnackBar(content: Text('Gagal memproses gambar: ${e.toString()}')),
       );
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) setState(() => _isBusy = false);
     }
   }
 
@@ -96,32 +100,48 @@ class _CameraScreenState extends State<CameraScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_controller == null || !_controller!.value.isInitialized) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Colors.white)),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
-      body: (_controller == null || !_controller!.value.isInitialized)
-          ? const Center(child: CircularProgressIndicator())
-          : Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox.expand(child: CameraPreview(_controller!)),
-                Positioned(
-                  bottom: 50,
-                  child: FloatingActionButton.extended(
-                    onPressed: _busy ? null : _scanAndConfirm,
-                    backgroundColor: Colors.white,
-                    label: _busy
-                        ? const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16.0),
-                            child: SizedBox(
-                              width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          )
-                        : const Text('Scan', style: TextStyle(color: Colors.green)),
-                    icon: _busy ? null : const Icon(Icons.check, color: Colors.green),
-                  ),
-                ),
-              ],
+      body: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Tampilan kamera mengisi seluruh layar
+          Positioned.fill(
+            child: CameraPreview(_controller!),
+          ),
+
+          // Tombol kembali di pojok kiri atas
+          Positioned(
+            top: 50,
+            left: 16,
+            child: CircleAvatar(
+              backgroundColor: Colors.black.withValues(alpha: 0.5),
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
             ),
+          ),
+          
+          // Tombol Scan di bawah
+          Positioned(
+            bottom: 50,
+            child: FloatingActionButton.large(
+              onPressed: _isBusy ? null : _scanAndConfirm,
+              child: _isBusy
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Icon(Icons.camera_alt),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

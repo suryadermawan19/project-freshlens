@@ -1,7 +1,12 @@
 // lib/edit_profile_screen.dart
 
+import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:freshlens_ai_app/providers/loading_provider.dart';
 import 'package:freshlens_ai_app/service/firestore_service.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -11,72 +16,16 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
+  final FirestoreService _firestoreService = FirestoreService();
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _ageController = TextEditingController();
-  final _occupationController = TextEditingController();
-  
-  final _firestoreService = FirestoreService();
-  bool _isLoading = false;
+  final ImagePicker _picker = ImagePicker();
 
-  // Variabel untuk menampung data awal
-  Map<String, dynamic>? _initialData;
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _ageController = TextEditingController();
+  final TextEditingController _occupationController = TextEditingController();
 
-  @override
-  void initState() {
-    super.initState();
-    // Ambil data profil saat ini untuk ditampilkan di form
-    _loadInitialData();
-  }
-
-  Future<void> _loadInitialData() async {
-    final userDoc = await _firestoreService.getUserProfile().first;
-    if (userDoc.exists) {
-      _initialData = userDoc.data() as Map<String, dynamic>;
-      // Isi controller dengan data yang sudah ada
-      _nameController.text = _initialData?['name'] ?? '';
-      _ageController.text = _initialData?['age']?.toString() ?? '';
-      _occupationController.text = _initialData?['occupation'] ?? '';
-    }
-  }
-
-  Future<void> _submitUpdate() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      // Siapkan data yang akan di-update
-      final Map<String, dynamic> updatedData = {
-        'name': _nameController.text.trim(),
-        'age': int.parse(_ageController.text.trim()),
-        'occupation': _occupationController.text.trim(),
-      };
-
-      // Panggil service untuk update profil
-      await _firestoreService.updateUserProfile(updatedData);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profil berhasil diperbarui!'), backgroundColor: Colors.green),
-        );
-        // Kembali ke halaman profil setelah berhasil
-        Navigator.pop(context);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal memperbarui profil: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
+  String? _currentImageUrl;
+  File? _selectedImageFile;
 
   @override
   void dispose() {
@@ -86,96 +35,185 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFAF8F1),
-      appBar: AppBar(
-        title: const Text('Edit Profil'),
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 20.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Form Input Nama
-                TextFormField(
-                  controller: _nameController,
-                  decoration: _buildInputDecoration('Nama Lengkap', Icons.person_outline),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Nama tidak boleh kosong';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
+  // Fungsi untuk memilih gambar
+  Future<void> _pickImage(ImageSource source) async {
+    final XFile? pickedFile = await _picker.pickImage(source: source, imageQuality: 50);
 
-                // Form Input Umur
-                TextFormField(
-                  controller: _ageController,
-                  keyboardType: TextInputType.number,
-                  decoration: _buildInputDecoration('Umur', Icons.cake_outlined),
-                   validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Umur tidak boleh kosong';
-                    }
-                    if (int.tryParse(value) == null) {
-                      return 'Masukkan angka yang valid';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Form Input Pekerjaan
-                TextFormField(
-                  controller: _occupationController,
-                  decoration: _buildInputDecoration('Pekerjaan', Icons.work_outline),
-                   validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Pekerjaan tidak boleh kosong';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 40),
-
-                // Tombol Submit
-                _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : ElevatedButton(
-                        onPressed: _submitUpdate,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF5D8A41),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        ),
-                        child: const Text('SIMPAN PERUBAHAN', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      ),
-              ],
+    if (pickedFile != null) {
+      setState(() {
+        _selectedImageFile = File(pickedFile.path);
+      });
+    }
+  }
+  
+  // Menampilkan dialog pilihan sumber gambar
+  void _showImageSourceDialog() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: <Widget>[
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Pilih dari Galeri'),
+              onTap: () {
+                _pickImage(ImageSource.gallery);
+                Navigator.of(context).pop();
+              },
             ),
-          ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera),
+              title: const Text('Ambil Foto'),
+              onTap: () {
+                _pickImage(ImageSource.camera);
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
         ),
       ),
     );
   }
 
-  InputDecoration _buildInputDecoration(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon),
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.grey.shade300)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.grey.shade300)),
+  Future<void> _saveProfile() async {
+     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    final loadingProvider = Provider.of<LoadingProvider>(context, listen: false);
+    loadingProvider.startLoading();
+
+    try {
+      // 1. Jika ada gambar baru yang dipilih, upload dulu
+      if (_selectedImageFile != null) {
+        await _firestoreService.uploadProfileImage(_selectedImageFile!.path);
+      }
+
+      // 2. Update data teks
+      final updatedData = {
+        'name': _nameController.text.trim(),
+        'age': int.parse(_ageController.text.trim()),
+        'occupation': _occupationController.text.trim(),
+      };
+      await _firestoreService.updateUserProfile(updatedData);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profil berhasil diperbarui!'), backgroundColor: Colors.green),
+        );
+        Navigator.pop(context); // Kembali ke halaman profil
+      }
+
+    } catch (e) {
+       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal memperbarui profil: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      loadingProvider.stopLoading();
+    }
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Edit Profil'),
+        actions: [
+          // Tombol simpan di AppBar
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: TextButton(
+              onPressed: _saveProfile,
+              child: const Text('SIMPAN'),
+            ),
+          )
+        ],
+      ),
+      // Gunakan StreamBuilder untuk mendapatkan data awal
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: _firestoreService.getUserProfile(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final userData = snapshot.data!.data() as Map<String, dynamic>;
+          // Isi controller hanya jika belum pernah diisi sebelumnya
+          if (_nameController.text.isEmpty) {
+            _nameController.text = userData['name'] ?? '';
+            _ageController.text = (userData['age'] ?? 0).toString();
+            _occupationController.text = userData['occupation'] ?? '';
+            _currentImageUrl = userData['profileImageUrl'];
+          }
+          
+          return _buildForm(context);
+        },
+      ),
+    );
+  }
+  
+  Widget _buildForm(BuildContext context) {
+    return Consumer<LoadingProvider>(
+      builder: (context, loadingProvider, child) {
+        return AbsorbPointer(
+          absorbing: loadingProvider.isLoading,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  // Tampilan Foto Profil
+                  _buildProfileImage(),
+                  const SizedBox(height: 16),
+                  TextButton.icon(
+                    onPressed: _showImageSourceDialog,
+                    icon: const Icon(Icons.camera_alt_outlined, size: 20),
+                    label: const Text('Ubah Foto Profil'),
+                  ),
+                  const SizedBox(height: 40),
+
+                  // Form Input
+                  TextFormField(controller: _nameController, decoration: const InputDecoration(labelText: 'Nama Lengkap'), validator: (v) => v!.isEmpty ? 'Wajib diisi' : null),
+                  const SizedBox(height: 20),
+                  TextFormField(controller: _ageController, decoration: const InputDecoration(labelText: 'Usia'), keyboardType: TextInputType.number, validator: (v) => v!.isEmpty ? 'Wajib diisi' : null),
+                  const SizedBox(height: 20),
+                  TextFormField(controller: _occupationController, decoration: const InputDecoration(labelText: 'Pekerjaan'), validator: (v) => v!.isEmpty ? 'Wajib diisi' : null),
+                  
+                  // Menampilkan loading overlay
+                  if (loadingProvider.isLoading)
+                    Container(
+                      margin: const EdgeInsets.only(top: 32),
+                      child: const Center(child: CircularProgressIndicator()),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildProfileImage() {
+    // Prioritaskan gambar baru yang dipilih, jika tidak ada, gunakan gambar dari URL
+    ImageProvider? backgroundImage;
+    if (_selectedImageFile != null) {
+      backgroundImage = FileImage(_selectedImageFile!);
+    } else if (_currentImageUrl != null) {
+      backgroundImage = NetworkImage(_currentImageUrl!);
+    }
+
+    return CircleAvatar(
+      radius: 60,
+      backgroundColor: Colors.grey.shade300,
+      backgroundImage: backgroundImage,
+      child: backgroundImage == null
+          ? const Icon(Icons.person, size: 60, color: Colors.grey)
+          : null,
     );
   }
 }

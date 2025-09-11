@@ -12,12 +12,14 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, List
 
+# Import berat: tetap di top-level sesuai permintaan
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
+
 from firebase_functions import scheduler_fn
 from firebase_functions import firestore_fn, https_fn, options
-from firebase_admin import initialize_app, storage, firestore
+from firebase_admin import initialize_app, storage, firestore, messaging
 
 try:
     from google.cloud import vision
@@ -30,11 +32,13 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 PROJECT_ID = os.getenv("GCP_PROJECT") or os.getenv("GCLOUD_PROJECT")
 _FIREBASE_CONFIG = json.loads(os.environ.get("FIREBASE_CONFIG", "{}"))
+
 DEFAULT_BUCKET = (
     os.getenv("STORAGE_BUCKET")
     or _FIREBASE_CONFIG.get("storageBucket")
     or (f"{PROJECT_ID}.appspot.com" if PROJECT_ID else None)
 )
+
 
 # ---- NAMA FILE MODEL DI STORAGE (root bucket)
 MODEL_BLOB_PATH = "freshlens_lgbm.txt"
@@ -42,6 +46,7 @@ MODEL_BLOB_PATH = "freshlens_lgbm.txt"
 options.set_global_options(region="asia-southeast2")
 initialize_app(options={"storageBucket": DEFAULT_BUCKET})
 
+# Cache booster di memori proses
 _booster_cache: Optional[lgb.Booster] = None
 
 # --- TRAINING_COLUMNS (17 fitur final) ---
@@ -59,7 +64,7 @@ TRAINING_COLUMNS: List[str] = [
 # Helper: Loader Model (LightGBM)
 # ===============================
 def _load_booster_if_needed() -> lgb.Booster:
-    """Lazy-load LightGBM booster from Firebase Storage and cache it in memory."""
+    """Lazy-load LightGBM booster dari Firebase Storage dan cache di memori."""
     global _booster_cache
     if _booster_cache is not None:
         return _booster_cache
@@ -93,7 +98,7 @@ def _load_booster_if_needed() -> lgb.Booster:
 # Helper: Sensor & Feature Builder
 # ===============================
 def _get_sensor_statistics(uid: str, hours: int = 24) -> Dict[str, float]:
-    """Ambil ringkasan suhu/RH dari history 24 jam terakhir; fallback ke latest atau default."""
+    """Ambil ringkasan suhu/RH dari 24 jam terakhir; fallback ke 'latest' atau default."""
     db = firestore.client()
     now = datetime.now(timezone.utc)
     start_time = now - timedelta(hours=hours)
@@ -186,7 +191,7 @@ def _build_features_for_item(uid: str, item_doc_data: Dict) -> pd.DataFrame:
         "Hari_Ke": int(round(durasi_hari)),
         "Suhu (°C)": suhu,
         "Kelembapan (%)": rh,
-        "temp_x_humid": suhu * rh,  # NOTE: sesuai training; tidak dinormalisasi
+        "temp_x_humid": suhu * rh,  # sesuai training; tidak dinormalisasi
     }
 
     # One-hot Nama Item & Kondisi Awal
@@ -467,3 +472,60 @@ def daily_shelflife_recalculation(event: scheduler_fn.ScheduledEvent):
         logging.info(f"[DailyRecalc] Selesai. Total item diperbarui: {total_updated}")
     except Exception as e:
         logging.critical(f"[DailyRecalc][FATAL] {e}")
+
+# ===============================
+# Scheduler: Notifikasi harian item kadaluarsa (FCM)
+# ===============================
+@scheduler_fn.on_schedule(schedule="every day 09:00", timezone="Asia/Jakarta", memory=options.MemoryOption.MB_256)
+def check_expiring_items(event: scheduler_fn.ScheduledEvent) -> None:
+    """
+    Memeriksa semua item di inventaris semua pengguna dan mengirim notifikasi
+    jika ada item yang akan kedaluwarsa dalam <= 2 hari.
+    """
+    logging.info("[FCM] Menjalankan pengecekan item kedaluwarsa...")
+    db = firestore.client()
+
+    try:
+        # Ambil semua item dari semua pengguna yang akan habis dalam 2 hari
+        expiring_items_query = db.collection_group('items').where('predictedShelfLife', '<=', 2)
+        expiring_items = expiring_items_query.stream()
+
+        # Cache token per user agar tidak query user doc berulang-ulang
+        token_cache: Dict[str, Optional[str]] = {}
+
+        for item in expiring_items:
+            item_data = item.to_dict() or {}
+            item_name = item_data.get('itemName', 'Item')
+
+            # Dapatkan ID pemilik dari path dokumen (users/{uid}/items/{itemId})
+            owner_ref = item.reference.parent.parent  # type: ignore[assignment]
+            if owner_ref is None:
+                logging.warning("[FCM] Gagal temukan owner_ref untuk item %s", item.id)
+                continue
+            owner_id = owner_ref.id
+
+            if owner_id not in token_cache:
+                user_doc = db.collection('users').document(owner_id).get()
+                token_cache[owner_id] = (user_doc.to_dict() or {}).get('fcmToken') if user_doc.exists else None
+
+            token = token_cache.get(owner_id)
+            if not token:
+                logging.info(f"[FCM] Lewati {owner_id}: tidak ada fcmToken")
+                continue
+
+            # Buat dan kirim pesan notifikasi
+            msg = messaging.Message(
+                notification=messaging.Notification(
+                    title='Segera Habis!',
+                    body=f"Jangan lupa, {item_name} Anda akan segera habis masa simpannya. Yuk, segera diolah!",
+                ),
+                token=token,
+            )
+            try:
+                resp = messaging.send(msg)
+                logging.info(f"[FCM] Notifikasi terkirim ke {owner_id}: {resp}")
+            except Exception as e:
+                logging.error(f"[FCM] Gagal mengirim notifikasi ke {owner_id}: {e}")
+
+    except Exception as e:
+        logging.error(f"[FCM] Error saat query/pengiriman notifikasi: {e}")

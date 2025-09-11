@@ -1,95 +1,73 @@
 // lib/service/notification_service.dart
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:timezone/timezone.dart' as tz;
-import 'package:flutter/material.dart';
 
 class NotificationService {
-  // Singleton pattern untuk memastikan hanya ada satu instance dari service ini
-  static final NotificationService _notificationService = NotificationService._internal();
-  factory NotificationService() {
-    return _notificationService;
-  }
-  NotificationService._internal();
+  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+  final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-      FlutterLocalNotificationsPlugin();
-
-  // Inisialisasi service
   Future<void> init() async {
-    // Pengaturan untuk Android
+    // Inisialisasi untuk iOS
+    await _firebaseMessaging.requestPermission(
+      alert: true,
+      announcement: false,
+      badge: true,
+      carPlay: false,
+      criticalAlert: false,
+      provisional: false,
+      sound: true,
+    );
+
+    // Konfigurasi Notifikasi Lokal untuk Android (agar notifikasi muncul saat app di foreground)
     const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher'); // Gunakan ikon aplikasi Anda
+        AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    // Pengaturan untuk iOS
-    const DarwinInitializationSettings initializationSettingsIOS =
-        DarwinInitializationSettings(
-      requestSoundPermission: false,
-      requestBadgePermission: false,
-      requestAlertPermission: false,
-    );
+    const InitializationSettings initializationSettings =
+        InitializationSettings(android: initializationSettingsAndroid);
 
-    const InitializationSettings initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-      iOS: initializationSettingsIOS,
-    );
+    await _flutterLocalNotificationsPlugin.initialize(initializationSettings);
 
-    // Inisialisasi timezone
-    tz.initializeTimeZones();
-
-    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
-  }
-
-  // Meminta izin notifikasi (khususnya untuk iOS)
-  Future<void> requestPermissions() async {
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-            IOSFlutterLocalNotificationsPlugin>()
-        ?.requestPermissions(
-          alert: true,
-          badge: true,
-          sound: true,
-        );
-  }
-
-  // Fungsi untuk menjadwalkan notifikasi harian
-  Future<void> scheduleDailyNotification(TimeOfDay notificationTime, String title, String body, int id) async {
-    await flutterLocalNotificationsPlugin.zonedSchedule(
-      id,
-      title,
-      body,
-      _nextInstanceOfTime(notificationTime),
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'daily_notification_channel_id',
-          'Daily Notifications',
-          channelDescription: 'Channel for daily reminder notifications',
-          importance: Importance.max,
-          priority: Priority.high,
-        ),
-        iOS: DarwinNotificationDetails(),
-      ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.time, // Ulangi setiap hari pada waktu yang sama
-    );
+    // Listener untuk notifikasi yang masuk saat aplikasi di foreground
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      print('Menerima notifikasi saat aplikasi di foreground: ${message.notification?.title}');
+      if (message.notification != null) {
+        _showLocalNotification(message);
+      }
+    });
   }
   
-  // Fungsi untuk membatalkan notifikasi
-  Future<void> cancelNotification(int id) async {
-    await flutterLocalNotificationsPlugin.cancel(id);
-  }
+  void _showLocalNotification(RemoteMessage message) async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+      AndroidNotificationDetails(
+        'high_importance_channel', // ID Channel
+        'High Importance Notifications', // Nama Channel
+        channelDescription: 'This channel is used for important notifications.',
+        importance: Importance.max,
+        priority: Priority.high,
+        showWhen: false,
+      );
+    const NotificationDetails platformChannelSpecifics =
+      NotificationDetails(android: androidPlatformChannelSpecifics);
+    
+    await _flutterLocalNotificationsPlugin.show(
+      0, // ID Notifikasi
+      message.notification!.title,
+      message.notification!.body,
+      platformChannelSpecifics,
+      payload: 'item x',
+    );
+}
 
-  // Helper untuk mendapatkan waktu jadwal berikutnya
-  tz.TZDateTime _nextInstanceOfTime(TimeOfDay time) {
-    final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
-    tz.TZDateTime scheduledDate =
-        tz.TZDateTime(tz.local, now.year, now.month, now.day, time.hour, time.minute);
-    if (scheduledDate.isBefore(now)) {
-      scheduledDate = scheduledDate.add(const Duration(days: 1));
-    }
-    return scheduledDate;
+
+  Future<void> requestPermissions() async {
+    await _firebaseMessaging.requestPermission();
+  }
+  
+  // Method untuk mendapatkan FCM token
+  Future<String?> getToken() async {
+    final token = await _firebaseMessaging.getToken();
+    print('FCM Token: $token');
+    return token;
   }
 }

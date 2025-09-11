@@ -1,8 +1,10 @@
-// lib/confirm_item_screen.dart (REVISI: autofill dari Cloud Vision + simpan ke Firestore)
+// lib/confirm_item_screen.dart
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:freshlens_ai_app/service/firestore_service.dart';
-import 'package:freshlens_ai_app/dashboard_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:freshlens_ai_app/providers/loading_provider.dart';
 
 class ConfirmItemScreen extends StatefulWidget {
   final String imagePath;
@@ -19,216 +21,185 @@ class ConfirmItemScreen extends StatefulWidget {
 }
 
 class _ConfirmItemScreenState extends State<ConfirmItemScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _firestoreService = FirestoreService();
-
   late final TextEditingController _nameController;
-  final TextEditingController _qtyController = TextEditingController(text: '1');
+  final _formKey = GlobalKey<FormState>();
 
-  // opsi kondisi awal — sesuaikan dengan yang dipakai di training kolom & backend
-  final List<String> _initialConditions = const [
-    'Matang',
-    'Mentah',
-    'Segar',
-    'Setengah Matang',
-  ];
-
-  String _selectedCondition = 'Segar';
-  bool _saving = false;
+  int _quantity = 1;
+  String? _selectedCondition;
+  final List<String> _conditions = ['Mentah', 'Setengah Matang', 'Segar', 'Matang',];
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(
-      text: _normalizeLabel(widget.detectedItemName),
-    );
+    _nameController = TextEditingController(text: widget.detectedItemName);
   }
-
+  
   @override
   void dispose() {
     _nameController.dispose();
-    _qtyController.dispose();
     super.dispose();
   }
 
-  // Normalisasi label Cloud Vision → nama item yang konsisten (Indonesia)
-  String _normalizeLabel(String raw) {
-    final l = raw.trim().toLowerCase();
-
-    // mapping umum EN → ID (tambah sendiri bila perlu)
-    const Map<String, String> mapEnToId = {
-      'apple': 'Apel',
-      'banana': 'Pisang',
-      'mango': 'Mangga',
-      'orange': 'Jeruk',
-      'grape': 'Anggur',
-      'grapes': 'Anggur',
-      'strawberry': 'Stroberi',
-      'tomato': 'Tomat',
-      'avocado': 'Alpukat',
-      'pineapple': 'Nanas',
-      'pear': 'Pir',
-      'watermelon': 'Semangka',
-      'papaya': 'Pepaya',
-      'kiwi': 'Kiwi',
-      'lemon': 'Lemon',
-      'lime': 'Jeruk Nipis',
-    };
-
-    // kalau label sudah Indonesia, biarkan
-    const Set<String> knownId = {
-      'apel', 'pisang', 'mangga', 'jeruk', 'anggur', 'stroberi',
-      'tomat', 'alpukat', 'nanas', 'pir', 'semangka', 'pepaya',
-      'kiwi', 'lemon', 'jeruk nipis',
-    };
-
-    if (mapEnToId.containsKey(l)) return mapEnToId[l]!;
-    if (knownId.contains(l)) {
-      // kapitalisasi huruf awal tiap kata
-      return l.split(' ').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
-    }
-
-    // fallback: kapitalisasi label asli
-    if (raw.isEmpty) return 'Tidak terdeteksi';
-    return raw[0].toUpperCase() + raw.substring(1);
-  }
-
   Future<void> _saveItem() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    final navigator = Navigator.of(context);
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-    final name = _nameController.text.trim();
-    final qtyStr = _qtyController.text.trim();
-    final qty = int.tryParse(qtyStr) ?? 0;
-
-    if (qty <= 0) {
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(content: Text('Jumlah harus lebih dari 0')),
+    // Validasi form
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    // Pastikan kondisi sudah dipilih
+    if (_selectedCondition == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Silakan pilih kondisi awal item.'), backgroundColor: Colors.orange),
       );
       return;
     }
 
-    setState(() => _saving = true);
+    final loadingProvider = Provider.of<LoadingProvider>(context, listen: false);
+    loadingProvider.startLoading();
+
     try {
-      await _firestoreService.addItem(
-        itemName: name,
-        quantity: qty,
-        initialCondition: _selectedCondition,
-        imagePath: widget.imagePath, // FirestoreService akan upload ke Storage
+      final firestoreService = FirestoreService();
+      await firestoreService.addItem(
+        itemName: _nameController.text.trim(),
+        quantity: _quantity,
+        initialCondition: _selectedCondition!,
+        imagePath: widget.imagePath,
       );
 
-      // kembali ke dashboard
-      navigator.pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const DashboardScreen()),
-        (route) => false,
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Item berhasil ditambahkan!'), backgroundColor: Colors.green),
+        );
+        // Kembali ke halaman utama setelah berhasil
+        Navigator.of(context).pop();
+      }
     } catch (e) {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('Gagal menyimpan item: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menyimpan item: $e'), backgroundColor: Colors.red),
+        );
+      }
     } finally {
-      if (mounted) setState(() => _saving = false);
+      loadingProvider.stopLoading();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final imageFile = File(widget.imagePath);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Konfirmasi Item'),
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Preview foto
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.file(
-                imageFile,
-                height: 220,
-                width: double.infinity,
-                fit: BoxFit.cover,
+        padding: const EdgeInsets.all(24.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Pratinjau Gambar
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.file(
+                  File(widget.imagePath),
+                  height: 200,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 24),
 
-            // Form konfirmasi
-            Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  // Nama item
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nama Item',
-                      prefixIcon: Icon(Icons.local_grocery_store_outlined),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Nama tidak boleh kosong' : null,
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Jumlah
-                  TextFormField(
-                    controller: _qtyController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Jumlah',
-                      prefixIcon: Icon(Icons.tag_outlined),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) {
-                      final n = int.tryParse(v ?? '');
-                      if (n == null || n <= 0) return 'Masukkan jumlah yang valid';
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Kondisi awal
-                  DropdownButtonFormField<String>(
-                    value: _selectedCondition,
-                    items: _initialConditions
-                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                        .toList(),
-                    onChanged: (v) => setState(() => _selectedCondition = v ?? _selectedCondition),
-                    decoration: const InputDecoration(
-                      labelText: 'Kondisi Awal',
-                      prefixIcon: Icon(Icons.inventory_2_outlined),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Tombol simpan
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _saving ? null : _saveItem,
-                      icon: _saving
-                          ? const SizedBox(
-                              width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.check_circle_outline),
-                      label: Text(_saving ? 'Menyimpan...' : 'Simpan'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: const Color(0xFF5D8A41),
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
+              // Form Nama Item
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Nama Item',
+                  prefixIcon: Icon(Icons.label_outline),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Nama item tidak boleh kosong';
+                  }
+                  return null;
+                },
               ),
-            ),
-          ],
+              const SizedBox(height: 20),
+
+              // Form Jumlah
+              _buildQuantitySelector(),
+              const SizedBox(height: 20),
+
+              // Form Kondisi Awal
+              DropdownButtonFormField<String>(
+                value: _selectedCondition,
+                decoration: const InputDecoration(
+                  labelText: 'Kondisi Awal',
+                  prefixIcon: Icon(Icons.thermostat_auto_outlined),
+                ),
+                items: _conditions.map((String condition) {
+                  return DropdownMenuItem<String>(
+                    value: condition,
+                    child: Text(condition),
+                  );
+                }).toList(),
+                onChanged: (newValue) {
+                  setState(() {
+                    _selectedCondition = newValue;
+                  });
+                },
+                validator: (value) => value == null ? 'Pilih kondisi' : null,
+              ),
+              const SizedBox(height: 40),
+
+              // Tombol Simpan
+              Consumer<LoadingProvider>(
+                builder: (context, loadingProvider, child) {
+                  return loadingProvider.isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : ElevatedButton(
+                          onPressed: _saveItem,
+                          child: const Text('SIMPAN KE INVENTARIS'),
+                        );
+                },
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  // Widget helper untuk pemilih jumlah
+  Widget _buildQuantitySelector() {
+    return InputDecorator(
+      decoration: const InputDecoration(
+        labelText: 'Jumlah',
+        prefixIcon: Icon(Icons.format_list_numbered),
+        border: InputBorder.none, // Hapus border bawaan agar terlihat rapi
+        enabledBorder: InputBorder.none,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.remove_circle_outline),
+            onPressed: () {
+              if (_quantity > 1) {
+                setState(() => _quantity--);
+              }
+            },
+          ),
+          Text('$_quantity', style: Theme.of(context).textTheme.headlineMedium),
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline),
+            onPressed: () {
+              setState(() => _quantity++);
+            },
+          ),
+        ],
       ),
     );
   }
