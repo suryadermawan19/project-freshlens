@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:freshlens_ai_app/login_screen.dart'; // Navigasi ke layar Login
 import 'package:freshlens_ai_app/register_screen.dart'; // Navigasi ke layar Register
-
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 

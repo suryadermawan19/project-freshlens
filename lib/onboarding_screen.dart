@@ -1,99 +1,86 @@
-// lib/onboarding_screen.dart
+// lib/welcome_screen.dart
 
 import 'package:flutter/material.dart';
 import 'package:freshlens_ai_app/login_screen.dart';
 import 'package:freshlens_ai_app/register_screen.dart';
+import 'package:page_transition/page_transition.dart';
 
 class OnboardingScreen extends StatelessWidget {
   const OnboardingScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Pastikan status bar terlihat di atas
     return Scaffold(
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          // Latar belakang dengan gradient atau warna dasar
+          // Latar belakang dengan gradient
           Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Color(0xFFF7F7F7), // Warna agak krem di atas
-                  Color(0xFFD4EDBF), // Warna hijau muda di bawah
+                  Colors.green.shade50,
+                  Colors.green.shade200,
                 ],
               ),
             ),
           ),
           
-          // [BARU] Gambar latar belakang gelombang di bagian bawah
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Image.asset(
-              'assets/images/welcome_background.png', // Ganti dengan path ilustrasi gelombang Anda
-              fit: BoxFit.cover, // Menutupi lebar
-              alignment: Alignment.bottomCenter,
-            ),
-          ),
-
-          // Konten utama (Logo, Teks, Tombol)
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center, // Pusatkan vertikal
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Spacer(flex: 2), // Dorong ke bawah dari atas
+                  const Spacer(flex: 2),
                   
-                  // [BARU] Logo Aplikasi (pastikan logo FreshLens ada di assets/images/logo.png)
+                  // Logo Aplikasi
                   Image.asset(
-                    'assets/images/logo.png', // Sesuaikan dengan path logo aplikasi Anda
-                    width: 150, // Ukuran logo yang lebih besar
-                    height: 150,
+                    'assets/images/logo.png', // Pastikan path logo benar
+                    height: 120,
                   ),
-                  const SizedBox(height: 15),
+                  const SizedBox(height: 16),
                   
-                  // [BARU] Nama Aplikasi
+                  // Nama Aplikasi
                   Text(
-                    'FreshLens',
-                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                    'FreshLens AI',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF333333), // Warna teks agar terlihat jelas
+                          color: Colors.green.shade800,
                         ),
                   ),
                   const SizedBox(height: 8),
                   
-                  // Slogan atau Deskripsi Singkat
+                  // Slogan
                   Text(
-                    'Jaga kesegaran, kurangi limbah.',
+                    'Jaga kesegaran, kurangi limbah.\nSelamat datang!',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           color: Colors.grey[700],
                         ),
                   ),
                   
-                  const Spacer(flex: 3), // Dorong ke atas dari bawah
+                  const Spacer(flex: 3),
                   
                   // Tombol Masuk
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const LoginScreen()),
-                        );
+                        Navigator.push(context, PageTransition(
+                          type: PageTransitionType.fade,
+                          child: const LoginScreen(),
+                        ));
                       },
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Theme.of(context).primaryColor, // Menggunakan warna utama tema
+                        backgroundColor: Theme.of(context).primaryColor,
                         foregroundColor: Colors.white,
                       ),
                       child: const Text('MASUK'),
-                    ),
+                    ), 
                   ),
                   const SizedBox(height: 16),
                   
@@ -102,21 +89,20 @@ class OnboardingScreen extends StatelessWidget {
                     width: double.infinity,
                     child: OutlinedButton(
                       onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const RegisterScreen()),
-                        );
+                        Navigator.push(context, PageTransition(
+                          type: PageTransitionType.fade,
+                          child: const RegisterScreen(),
+                        ));
                       },
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        side: BorderSide(color: Theme.of(context).primaryColor, width: 2), // Warna border sesuai tema
+                        side: BorderSide(color: Theme.of(context).primaryColor, width: 2),
                         foregroundColor: Theme.of(context).primaryColor,
                       ),
                       child: const Text('DAFTAR'),
-
                     ),
                   ),
-                  const Spacer(), // Sedikit ruang di bawah tombol
+                   const SizedBox(height: 32),
                 ],
               ),
             ),

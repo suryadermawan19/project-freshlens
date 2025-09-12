@@ -1,17 +1,15 @@
-// lib/main.dart
 
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:freshlens_ai_app/onboarding_screen.dart'; // Diganti ke onboarding_screen.dart
+import 'package:freshlens_ai_app/onboarding_screen.dart';
 import 'package:freshlens_ai_app/providers/loading_provider.dart';
-import 'package:freshlens_ai_app/service/notification_service.dart'; // Dimatikan sementara
+import 'package:freshlens_ai_app/service/notification_service.dart'; 
 import 'package:freshlens_ai_app/theme_provider.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:freshlens_ai_app/service/firestore_service.dart';
 
-// [LANGKAH 1.1] Definisikan palet warna sesuai desain Figma.
 class AppColors {
   static const Color primaryGreen = Color(0xFF5D8A41);
   static const Color backgroundCream = Color(0xFFFAF8F1);

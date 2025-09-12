@@ -26,9 +26,11 @@ class FreshnessStatusBar extends StatelessWidget {
       <= 4 => ('Segera Olah', Colors.orange.shade700),
       _ => ('Segar', Colors.green.shade600),
     };
-    
+
     // Kalkulasi persentase untuk progress bar
-    final double percentage = (daysLeft > 0 ? daysLeft.toDouble() / maxShelfLife : 0.0).clamp(0.0, 1.0);
+    final double percentage =
+        (daysLeft > 0 ? daysLeft.toDouble() / maxShelfLife : 0.0)
+            .clamp(0.0, 1.0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -36,8 +38,11 @@ class FreshnessStatusBar extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Status Kesegaran', style: Theme.of(context).textTheme.titleMedium),
-            Text(statusText, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold)),
+            Text('Status Kesegaran',
+                style: Theme.of(context).textTheme.titleMedium),
+            Text(statusText,
+                style: TextStyle(
+                    color: statusColor, fontWeight: FontWeight.bold)),
           ],
         ),
         const SizedBox(height: 8),
@@ -79,28 +84,35 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     // Selalu urutkan batch dari yang paling mendesak
     _batches.sort((a, b) => a.predictedShelfLife.compareTo(b.predictedShelfLife));
   }
-  
-  // --- FUNGSI-FUNGSI LOGIKA (Tidak ada perubahan signifikan) ---
-  
+
+  // --- FUNGSI-FUNGSI LOGIKA ---
   String _getStorageTip(String itemName) {
     String lowerCaseItemName = itemName.toLowerCase();
     const tips = {
-      'tomat': 'Simpan tomat di suhu ruang dan jauhkan dari sinar matahari langsung. Jangan simpan di kulkas karena akan merusak teksturnya.',
-      'selada': 'Bungkus selada dengan kertas tisu, masukkan ke wadah kedap udara, lalu simpan di laci kulkas.',
-      'pisang': 'Simpan pisang di suhu ruang. Untuk memperlambat pematangan, bungkus pangkal tandan pisang dengan plastik.',
-      'wortel': 'Potong bagian atas wortel (daunnya). Simpan di dalam kantong plastik yang sedikit terbuka di laci kulkas.',
+      'tomat':
+          'Simpan tomat di suhu ruang dan jauhkan dari sinar matahari langsung. Jangan simpan di kulkas karena akan merusak teksturnya.',
+      'selada':
+          'Bungkus selada dengan kertas tisu, masukkan ke wadah kedap udara, lalu simpan di laci kulkas.',
+      'pisang':
+          'Simpan pisang di suhu ruang. Untuk memperlambat pematangan, bungkus pangkal tandan pisang dengan plastik.',
+      'wortel':
+          'Potong bagian atas wortel (daunnya). Simpan di dalam kantong plastik yang sedikit terbuka di laci kulkas.',
     };
-    return tips[lowerCaseItemName] ?? 'Pastikan item disimpan di tempat yang sejuk dan kering untuk menjaga kesegarannya.';
+    return tips[lowerCaseItemName] ??
+        'Pastikan item disimpan di tempat yang sejuk dan kering untuk menjaga kesegarannya.';
   }
-  
+
   void _showUsedConfirmation(Batch batch) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Konfirmasi'),
-        content: Text('Anda yakin sudah mengolah ${batch.quantity} buah ${widget.itemGroup.itemName}? Aksi ini akan menambah statistik Anda.'),
+        content: Text(
+            'Anda yakin sudah mengolah ${batch.quantity} buah ${widget.itemGroup.itemName}? Aksi ini akan menambah statistik Anda.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Batal')),
           ElevatedButton(
             onPressed: () async {
               setState(() => _isLoading = true);
@@ -110,14 +122,16 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
 
               await _firestoreService.markAsUsed(batch);
 
-              if(!mounted) return;
+              if (!mounted) return;
               setState(() {
                 _batches.remove(batch);
                 _isLoading = false;
               });
 
               navigator.pop();
-              scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Statistik berhasil diperbarui!'), backgroundColor: Colors.green));
+              scaffoldMessenger.showSnackBar(const SnackBar(
+                  content: Text('Statistik berhasil diperbarui!'),
+                  backgroundColor: Colors.green));
 
               if (_batches.isEmpty) rootNavigator.pop();
             },
@@ -127,15 +141,19 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       ),
     );
   }
-  
+
   void _showDeleteConfirmation(Batch batch) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Hapus Batch (Dibuang)?', style: TextStyle(color: Colors.red)),
-        content: Text('Aksi ini menandakan ${batch.quantity} buah ${widget.itemGroup.itemName} terbuang.'),
+        title: const Text('Hapus Batch (Dibuang)?',
+            style: TextStyle(color: Colors.red)),
+        content: Text(
+            'Aksi ini menandakan ${batch.quantity} buah ${widget.itemGroup.itemName} terbuang.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Batal')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
@@ -144,13 +162,15 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
               final rootNavigator = Navigator.of(context);
 
               await _firestoreService.deleteItem(batch.id);
-              
-              if(!mounted) return;
+
+              if (!mounted) return;
               setState(() => _batches.remove(batch));
-              
+
               navigator.pop();
-              scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Batch berhasil dihapus'), backgroundColor: Colors.red));
-              
+              scaffoldMessenger.showSnackBar(const SnackBar(
+                  content: Text('Batch berhasil dihapus'),
+                  backgroundColor: Colors.red));
+
               if (_batches.isEmpty) rootNavigator.pop();
             },
             child: const Text('Ya, Hapus'),
@@ -160,41 +180,56 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     );
   }
 
-  // --- UI BUILDER METHODS (Kode UI baru ada di sini) ---
-
+  // --- UI BUILDER METHODS ---
   @override
   Widget build(BuildContext context) {
     final totalQuantity = _batches.fold(0, (sum, item) => sum + item.quantity);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFFAF8F1),
-      appBar: AppBar(
-        title: Text(widget.itemGroup.itemName),
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
+    // [BARU] Bungkus dengan Container untuk gradient
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.green.shade50,
+            Colors.green.shade200,
+          ],
+        ),
       ),
-      body: Stack(
-        children: [
-          ListView(
-            padding: const EdgeInsets.all(16.0),
-            children: [
-              _buildHeader(context, totalQuantity),
-              const SizedBox(height: 24),
-              _buildBatchList(context),
-              const SizedBox(height: 24),
-              _buildStorageTips(context),
-              const SizedBox(height: 24),
-              _buildRecipeButton(context),
-              const SizedBox(height: 24),
-            ],
-          ),
-          if (_isLoading)
-            Container(
-              color: Colors.black.withAlpha(100),
-              child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+      child: Scaffold(
+        // [PENTING] Jadikan Scaffold transparan
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: Text(widget.itemGroup.itemName),
+          // [PENTING] Jadikan AppBar transparan
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          foregroundColor: Colors.black,
+        ),
+        body: Stack(
+          children: [
+            ListView(
+              padding: const EdgeInsets.all(16.0),
+              children: [
+                _buildHeader(context, totalQuantity),
+                const SizedBox(height: 24),
+                _buildBatchList(context),
+                const SizedBox(height: 24),
+                _buildStorageTips(context),
+                const SizedBox(height: 24),
+                _buildRecipeButton(context),
+                const SizedBox(height: 24),
+              ],
             ),
-        ],
+            if (_isLoading)
+              Container(
+                color: Colors.black.withAlpha(100),
+                child: const Center(
+                    child: CircularProgressIndicator(color: Colors.white)),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -220,7 +255,8 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                     width: 100,
                     height: 100,
                     color: Colors.grey.shade200,
-                    child: const Icon(Icons.inventory_2_outlined, color: Colors.grey, size: 40),
+                    child: const Icon(Icons.inventory_2_outlined,
+                        color: Colors.grey, size: 40),
                   );
                 },
               ),
@@ -232,12 +268,18 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                 children: [
                   Text(
                     widget.itemGroup.itemName,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Total Kuantitas: $totalQuantity buah',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey.shade700),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyLarge
+                        ?.copyWith(color: Colors.grey.shade700),
                   ),
                 ],
               ),
@@ -256,13 +298,19 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 4.0),
           child: Text(
             'Daftar Batch',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(context)
+                .textTheme
+                .titleLarge
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
         ),
         const SizedBox(height: 8),
         Text(
           'Geser kartu ke kiri untuk melihat aksi cepat.',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
+          style: Theme.of(context)
+              .textTheme
+              .bodyMedium
+              ?.copyWith(color: Colors.grey.shade600),
         ),
         const SizedBox(height: 12),
         ListView.separated(
@@ -291,7 +339,8 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             foregroundColor: Colors.white,
             icon: Icons.check_circle_outline,
             label: 'Olah',
-            borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+            borderRadius:
+                const BorderRadius.horizontal(left: Radius.circular(16)),
           ),
           SlidableAction(
             onPressed: (context) => _showDeleteConfirmation(batch),
@@ -299,7 +348,8 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             foregroundColor: Colors.white,
             icon: Icons.delete_outline,
             label: 'Buang',
-            borderRadius: const BorderRadius.horizontal(right: Radius.circular(16)),
+            borderRadius:
+                const BorderRadius.horizontal(right: Radius.circular(16)),
           ),
         ],
       ),
@@ -320,14 +370,20 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
               if (isPriority) ...[
                 Text(
                   'PRIORITAS UTAMA',
-                  style: TextStyle(color: Colors.orange.shade800, fontWeight: FontWeight.bold, fontSize: 12),
+                  style: TextStyle(
+                      color: Colors.orange.shade800,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12),
                 ),
                 const SizedBox(height: 12),
               ],
-              _buildDetailRow(Icons.calendar_today_outlined, 'Tanggal Masuk', '${batch.entryDate.day}/${batch.entryDate.month}/${batch.entryDate.year}'),
-              _buildDetailRow(Icons.thermostat_auto_outlined, 'Kondisi Awal', batch.initialCondition),
+              _buildDetailRow(Icons.calendar_today_outlined, 'Tanggal Masuk',
+                  '${batch.entryDate.day}/${batch.entryDate.month}/${batch.entryDate.year}'),
+              _buildDetailRow(
+                  Icons.thermostat_auto_outlined, 'Kondisi Awal', batch.initialCondition),
               _buildDetailRow(Icons.tag_outlined, 'Jumlah', '${batch.quantity} buah'),
-              _buildDetailRow(Icons.hourglass_bottom_outlined, 'Prediksi Sisa Umur', '${batch.predictedShelfLife} hari'),
+              _buildDetailRow(Icons.hourglass_bottom_outlined,
+                  'Prediksi Sisa Umur', '${batch.predictedShelfLife} hari'),
               const Divider(height: 24),
               FreshnessStatusBar(daysLeft: batch.predictedShelfLife),
             ],
@@ -408,7 +464,8 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(vertical: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Poppins'),
+        textStyle: const TextStyle(
+            fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Montserrat'),
       ),
     );
   }

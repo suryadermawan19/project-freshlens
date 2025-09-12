@@ -16,15 +16,13 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
 
-  // [DIUBAH] Kita definisikan _pages di dalam initState agar bisa meneruskan fungsi
   late final List<Widget> _pages;
 
   @override
   void initState() {
     super.initState();
     _pages = <Widget>[
-      // Kirim fungsi _onItemTapped ke HomeContent
-      HomeContent(onViewAllTapped: () => _onItemTapped(2)), // 2 adalah index untuk Inventaris
+      HomeContent(onViewAllTapped: () => _onItemTapped(2)),
       const EducationScreen(),
       const InventoryScreen(),
       const ProfileScreen(),
@@ -39,37 +37,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _pages,
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-            Navigator.push(context,
-            MaterialPageRoute(builder: (context) => const CameraScreen()));
-        },
-        backgroundColor: Theme.of(context).primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 2.0,
-        shape: const CircleBorder(),
-        child: const Icon(Icons.camera_alt, size: 28),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 8.0,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        height: 65,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: <Widget>[
-            _buildNavItem(index: 0, label: 'Beranda', activeIcon: Icons.home, inactiveIcon: Icons.home_outlined),
-            _buildNavItem(index: 1, label: 'Edukasi', activeIcon: Icons.menu_book, inactiveIcon: Icons.menu_book_outlined),
-            const SizedBox(width: 48),
-            _buildNavItem(index: 2, label: 'Inventaris', activeIcon: Icons.inventory_2, inactiveIcon: Icons.inventory_2_outlined),
-            _buildNavItem(index: 3, label: 'Profil', activeIcon: Icons.person, inactiveIcon: Icons.person_outline_rounded),
+    // [BARU] Bungkus dengan Container untuk menambahkan gradient
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.green.shade50,
+            Colors.green.shade200,
           ],
+        ),
+      ),
+      child: Scaffold(
+        // [PENTING] Jadikan Scaffold transparan
+        backgroundColor: Colors.transparent,
+        body: IndexedStack(
+          index: _selectedIndex,
+          children: _pages,
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () {
+              Navigator.push(context,
+              MaterialPageRoute(builder: (context) => const CameraScreen()));
+          },
+          backgroundColor: Theme.of(context).primaryColor,
+          foregroundColor: Colors.white,
+          elevation: 2.0,
+          shape: const CircleBorder(),
+          child: const Icon(Icons.camera_alt, size: 28),
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+        bottomNavigationBar: BottomAppBar(
+          shape: const CircularNotchedRectangle(),
+          notchMargin: 8.0,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          height: 65,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              _buildNavItem(index: 0, label: 'Beranda', activeIcon: Icons.home, inactiveIcon: Icons.home_outlined),
+              _buildNavItem(index: 1, label: 'Edukasi', activeIcon: Icons.menu_book, inactiveIcon: Icons.menu_book_outlined),
+              const SizedBox(width: 48),
+              _buildNavItem(index: 2, label: 'Inventaris', activeIcon: Icons.inventory_2, inactiveIcon: Icons.inventory_2_outlined),
+              _buildNavItem(index: 3, label: 'Profil', activeIcon: Icons.person, inactiveIcon: Icons.person_outline_rounded),
+            ],
+          ),
         ),
       ),
     );

@@ -281,45 +281,46 @@ class _HomeContentState extends State<HomeContent> {
   }
   
   Widget _buildUrgentItemsCarousel(BuildContext context, List<InventoryItemGroup> items) {
-    if (items.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24.0),
-        height: 100,
-        child: Center(child: Text('Tidak ada item yang perlu segera diolah.', style: TextStyle(color: Colors.grey[600]))),
-      );
-    }
-
-    return SizedBox(
-      height: 220,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: items.length,
-        padding: const EdgeInsets.symmetric(horizontal: 24.0),
-        itemBuilder: (context, index) {
-          final itemGroup = items[index];
-          final shortestDays = itemGroup.batches.map((b) => b.predictedShelfLife).reduce((a, b) => a < b ? a : b);
-          return Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ItemDetailScreen(itemGroup: itemGroup),
-                  ),
-                );
-              },
-              child: UrgentItemCard(
-                imageUrl: itemGroup.imagePath,
-                itemName: itemGroup.itemName,
-                daysLeft: shortestDays,
-              ),
-            ),
-          );
-        },
-      ),
+  if (items.isEmpty) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      height: 100,
+      child: Center(child: Text('Tidak ada item yang perlu segera diolah.', style: TextStyle(color: Colors.grey[600]))),
     );
   }
+
+  return SizedBox(
+    height: 220,
+    child: ListView.builder(
+      scrollDirection: Axis.horizontal,
+      itemCount: items.length,
+      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      itemBuilder: (context, index) {
+        final itemGroup = items[index];
+        final shortestDays = itemGroup.batches.map((b) => b.predictedShelfLife).reduce((a, b) => a < b ? a : b);
+        return Padding(
+          padding: const EdgeInsets.only(right: 16.0),
+          // [DIUBAH] Bungkus dengan GestureDetector
+          child: GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ItemDetailScreen(itemGroup: itemGroup),
+                ),
+              );
+            },
+            child: UrgentItemCard(
+              imageUrl: itemGroup.imagePath,
+              itemName: itemGroup.itemName,
+              daysLeft: shortestDays,
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
 
   Widget _buildInventoryPreview(BuildContext context, List<InventoryItemGroup> items) {
     if (items.isEmpty) {

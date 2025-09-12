@@ -35,10 +35,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  // Fungsi untuk memilih gambar
   Future<void> _pickImage(ImageSource source) async {
     final XFile? pickedFile = await _picker.pickImage(source: source, imageQuality: 50);
-
     if (pickedFile != null) {
       setState(() {
         _selectedImageFile = File(pickedFile.path);
@@ -46,7 +44,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
   
-  // Menampilkan dialog pilihan sumber gambar
   void _showImageSourceDialog() {
     showModalBottomSheet(
       context: context,
@@ -84,24 +81,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     loadingProvider.startLoading();
 
     try {
-      // 1. Jika ada gambar baru yang dipilih, upload dulu
       if (_selectedImageFile != null) {
         await _firestoreService.uploadProfileImage(_selectedImageFile!.path);
       }
 
-      // 2. Update data teks
-      final updatedData = {
+      final Map<String, dynamic> updatedData = {
         'name': _nameController.text.trim(),
-        'age': int.parse(_ageController.text.trim()),
+        'age': int.tryParse(_ageController.text.trim()) ?? 0,
         'occupation': _occupationController.text.trim(),
       };
+
       await _firestoreService.updateUserProfile(updatedData);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profil berhasil diperbarui!'), backgroundColor: Colors.green),
         );
-        Navigator.pop(context); // Kembali ke halaman profil
+        Navigator.pop(context);
       }
 
     } catch (e) {
@@ -115,42 +111,45 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Edit Profil'),
-        actions: [
-          // Tombol simpan di AppBar
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: TextButton(
-              onPressed: _saveProfile,
-              child: const Text('SIMPAN'),
-            ),
-          )
-        ],
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.green.shade50,
+            Colors.green.shade200,
+          ],
+        ),
       ),
-      // Gunakan StreamBuilder untuk mendapatkan data awal
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: _firestoreService.getUserProfile(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: const Text('Edit Profil'),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          // [DIHAPUS] Tombol simpan di AppBar dihapus dari sini
+        ),
+        body: StreamBuilder<DocumentSnapshot>(
+          stream: _firestoreService.getUserProfile(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-          final userData = snapshot.data!.data() as Map<String, dynamic>;
-          // Isi controller hanya jika belum pernah diisi sebelumnya
-          if (_nameController.text.isEmpty) {
-            _nameController.text = userData['name'] ?? '';
-            _ageController.text = (userData['age'] ?? 0).toString();
-            _occupationController.text = userData['occupation'] ?? '';
-            _currentImageUrl = userData['profileImageUrl'];
-          }
-          
-          return _buildForm(context);
-        },
+            final userData = snapshot.data!.data() as Map<String, dynamic>;
+            if (_nameController.text.isEmpty) {
+              _nameController.text = userData['name'] ?? '';
+              _ageController.text = (userData['age'] ?? 0).toString();
+              _occupationController.text = userData['occupation'] ?? '';
+              _currentImageUrl = userData['profileImageUrl'];
+            }
+            
+            return _buildForm(context);
+          },
+        ),
       ),
     );
   }
@@ -166,7 +165,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               key: _formKey,
               child: Column(
                 children: [
-                  // Tampilan Foto Profil
                   _buildProfileImage(),
                   const SizedBox(height: 16),
                   TextButton.icon(
@@ -176,19 +174,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   const SizedBox(height: 40),
 
-                  // Form Input
                   TextFormField(controller: _nameController, decoration: const InputDecoration(labelText: 'Nama Lengkap'), validator: (v) => v!.isEmpty ? 'Wajib diisi' : null),
                   const SizedBox(height: 20),
                   TextFormField(controller: _ageController, decoration: const InputDecoration(labelText: 'Usia'), keyboardType: TextInputType.number, validator: (v) => v!.isEmpty ? 'Wajib diisi' : null),
                   const SizedBox(height: 20),
                   TextFormField(controller: _occupationController, decoration: const InputDecoration(labelText: 'Pekerjaan'), validator: (v) => v!.isEmpty ? 'Wajib diisi' : null),
                   
-                  // Menampilkan loading overlay
-                  if (loadingProvider.isLoading)
-                    Container(
-                      margin: const EdgeInsets.only(top: 32),
-                      child: const Center(child: CircularProgressIndicator()),
-                    ),
+                  // [BARU] Tombol simpan dipindahkan ke bawah
+                  const SizedBox(height: 40),
+                  SizedBox(
+                    width: double.infinity,
+                    child: loadingProvider.isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : ElevatedButton(
+                            onPressed: _saveProfile,
+                            child: const Text('SIMPAN PERUBAHAN'),
+                          ),
+                  ),
                 ],
               ),
             ),
@@ -199,7 +201,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Widget _buildProfileImage() {
-    // Prioritaskan gambar baru yang dipilih, jika tidak ada, gunakan gambar dari URL
     ImageProvider? backgroundImage;
     if (_selectedImageFile != null) {
       backgroundImage = FileImage(_selectedImageFile!);
