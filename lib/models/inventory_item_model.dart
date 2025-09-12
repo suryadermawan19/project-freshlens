@@ -3,7 +3,7 @@
 class Batch {
   final String id;
   final DateTime entryDate;
-  final int quantity;
+  int quantity;
   final int predictedShelfLife;
   final String initialCondition; // <-- TAMBAHAN BARU
 

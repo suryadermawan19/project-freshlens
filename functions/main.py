@@ -448,7 +448,11 @@ def update_all_shelflives(event: scheduler_fn.ScheduledEvent):
 # ===============================
 @scheduler_fn.on_schedule(schedule="0 0 * * *", timezone="Asia/Jakarta", memory=options.MemoryOption.MB_512)
 def daily_shelflife_recalculation(event: scheduler_fn.ScheduledEvent):
-    logging.info(f"Fungsi terjadwal harian berjalan: {event.timestamp}")
+    
+    wib_tz = timezone(timedelta(hours=7))
+    
+    logging.info(f"Fungsi terjadwal harian berjalan pada: {datetime.now(wib_tz)}")
+    
     db = firestore.client()
     try:
         booster = _load_booster_if_needed()
@@ -476,7 +480,7 @@ def daily_shelflife_recalculation(event: scheduler_fn.ScheduledEvent):
 # ===============================
 # Scheduler: Notifikasi harian item kadaluarsa (FCM)
 # ===============================
-@scheduler_fn.on_schedule(schedule="every day 09:00", timezone="Asia/Jakarta", memory=options.MemoryOption.MB_256)
+@scheduler_fn.on_schedule(schedule="every day 09:00", timezone="Asia/Jakarta", memory=options.MemoryOption.MB_512)
 def check_expiring_items(event: scheduler_fn.ScheduledEvent) -> None:
     """
     Memeriksa semua item di inventaris semua pengguna dan mengirim notifikasi
@@ -537,7 +541,7 @@ def check_expiring_items(event: scheduler_fn.ScheduledEvent) -> None:
 # ===============================
 # Cloud Function: Registrasi Perangkat IoT
 # ===============================
-@https_fn.on_call(region="asia-southeast2")
+@https_fn.on_call(region="asia-southeast2", memory=options.MemoryOption.MB_512)
 def registerDevice(req: https_fn.CallableRequest) -> Dict[str, any]:
     """
     Menghubungkan perangkat IoT ke akun pengguna yang sedang login.
@@ -638,7 +642,7 @@ def ingestSensorData(req: https_fn.Request) -> https_fn.Response:
         logging.error(f"Error saat memproses data sensor: {e}")
         return https_fn.Response("Terjadi kesalahan internal.", status=500)
 
-@https_fn.on_call(region="asia-southeast2")
+@https_fn.on_call(region="asia-southeast2",)
 def unregisterDevice(req: https_fn.CallableRequest) -> Dict[str, any]:
     """
     Memutuskan hubungan perangkat IoT dari akun pengguna yang sedang login.

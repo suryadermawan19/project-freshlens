@@ -36,7 +36,7 @@ class FirestoreService {
       'createdAt': FieldValue.serverTimestamp(),
       'savedFoodCount': 0,
       'moneySaved': 0.0,
-      'fcmToken': null, // Tambahkan field fcmToken saat profil dibuat
+      'fcmToken': null,
     });
   }
 
@@ -76,10 +76,44 @@ class FirestoreService {
 
   // --- FUNGSI SENSOR DATA ---
   Stream<DocumentSnapshot> getLatestSensorData() {
-    return _db.collection('users').doc(_uid).collection('sensor_data').doc('latest').snapshots();
+    return _db
+        .collection('users')
+        .doc(_uid)
+        .collection('sensor_data')
+        .doc('latest')
+        .snapshots();
   }
 
-  // --- FUNGSI MANAJEMEN INVENTARIS ---
+  // --- FUNGSI MANAJEMEN EDUKASI ---
+  Stream<QuerySnapshot> getArticles() {
+    return _db
+        .collection('articles')
+        .orderBy('timestamp', descending: true)
+        .snapshots();
+  }
+
+  // --- FUNGSI NOTIFIKASI ---
+  /// Menyimpan atau memperbarui FCM token pengguna
+  Future<void> saveUserToken(String? token) async {
+    if (token == null) return;
+    try {
+      await _db.collection('users').doc(_uid).update({
+        'fcmToken': token,
+      });
+    } catch (e) {
+      if (e is FirebaseException && e.code == 'not-found') {
+        // Dokumen user belum ada; biarkan hingga profil dibuat
+        // (opsional: bisa disimpan sementara di local prefs)
+        // print('Dokumen pengguna belum ada, token akan disimpan saat profil dibuat.');
+      } else {
+        // print('Gagal menyimpan token: $e');
+        rethrow;
+      }
+    }
+  }
+
+  // --- FUNGSI MANAJEMEN INVENTARIS (REVISI) ---
+
   Stream<QuerySnapshot> getInventoryItems() {
     return _db
         .collection('users')
@@ -115,54 +149,78 @@ class FirestoreService {
 
     await _db.collection('users').doc(_uid).collection('items').add(itemData);
   }
-  
-  Future<void> markAsUsed(Batch batch) async {
-    final userDocRef = _db.collection('users').doc(_uid);
-    final itemDocRef = _db.collection('users').doc(_uid).collection('items').doc(batch.id);
-    const double estimatedPricePerItem = 2500.0;
-    final double moneySaved = batch.quantity * estimatedPricePerItem;
 
-    return _db.runTransaction((transaction) async {
+  /// [DIUBAH] Mengurangi kuantitas & memperbarui statistik (menggunakan transaksi agar aman).
+  /// `Batch` diasumsikan model dengan field `id` dan `quantity`.
+  Future<void> markAsUsed(Batch batch, int quantityUsed) async {
+    if (quantityUsed <= 0) return;
+
+    final userDocRef = _db.collection('users').doc(_uid);
+    final itemDocRef = userDocRef.collection('items').doc(batch.id);
+    const double estimatedPricePerItem = 2500.0;
+
+    await _db.runTransaction((transaction) async {
+      // Ambil snapshot terkini untuk menghindari kondisi balapan
+      final itemSnap = await transaction.get(itemDocRef);
+      if (!itemSnap.exists) {
+        throw Exception('Batch tidak ditemukan.');
+      }
+
+      final currentQty = (itemSnap.data() as Map<String, dynamic>)['quantity'] as int? ?? 0;
+      final appliedQty = quantityUsed.clamp(0, currentQty);
+      if (appliedQty == 0) {
+        // Tidak ada yang bisa dikurangi
+        return;
+      }
+
+      final newQuantity = currentQty - appliedQty;
+      if (newQuantity <= 0) {
+        transaction.delete(itemDocRef);
+      } else {
+        transaction.update(itemDocRef, {'quantity': newQuantity});
+      }
+
+      final double moneySaved = appliedQty * estimatedPricePerItem;
+
       transaction.update(userDocRef, {
-        'savedFoodCount': FieldValue.increment(batch.quantity),
+        'savedFoodCount': FieldValue.increment(appliedQty),
         'moneySaved': FieldValue.increment(moneySaved),
       });
-      transaction.delete(itemDocRef);
     });
   }
 
-  Future<void> deleteItem(String itemId) async {
-    await _db.collection('users').doc(_uid).collection('items').doc(itemId).delete();
-  }
+  /// [DIUBAH] Membuang item (hanya mengurangi kuantitas tanpa update statistik).
+  Future<void> discardItems(String batchId, int currentQuantity, int quantityToDiscard) async {
+    if (quantityToDiscard <= 0) return;
 
-  Future<void> updateItem(String itemId, Map<String, dynamic> data) async {
-    await _db.collection('users').doc(_uid).collection('items').doc(itemId).update(data);
-  }
+    final userDocRef = _db.collection('users').doc(_uid);
+    final itemDocRef = userDocRef.collection('items').doc(batchId);
 
-  // --- FUNGSI NOTIFIKASI ---
-  /// Menyimpan atau memperbarui FCM token pengguna
-  Future<void> saveUserToken(String? token) async {
-    if (token == null) return;
-    try {
-      await _db.collection('users').doc(_uid).update({
-        'fcmToken': token,
-      });
-    } catch (e) {
-      // Handle error jika diperlukan, misalnya jika pengguna belum melengkapi profil
-      // dan dokumennya belum ada.
-      if (e is FirebaseException && e.code == 'not-found') {
-        print('Dokumen pengguna belum ada, token akan disimpan saat profil dibuat.');
+    await _db.runTransaction((transaction) async {
+      final snap = await transaction.get(itemDocRef);
+      if (!snap.exists) return;
+
+      final existingQty = (snap.data() as Map<String, dynamic>)['quantity'] as int? ?? 0;
+      final appliedQty = quantityToDiscard.clamp(0, existingQty);
+      final newQuantity = existingQty - appliedQty;
+
+      if (newQuantity <= 0) {
+        transaction.delete(itemDocRef);
       } else {
-        print('Gagal menyimpan token: $e');
+        transaction.update(itemDocRef, {'quantity': newQuantity});
       }
+    });
+  }
+
+  /// [DIUBAH] Men-set kuantitas baru; jika <= 0, item dihapus.
+  Future<void> updateItemQuantity(String batchId, int newQuantity) async {
+    final itemDocRef = _db.collection('users').doc(_uid).collection('items').doc(batchId);
+    if (newQuantity <= 0) {
+      await itemDocRef.delete();
+    } else {
+      await itemDocRef.update({'quantity': newQuantity});
     }
   }
 
-  // --- FUNGSI MANAJEMEN EDUKASI ---
-  Stream<QuerySnapshot> getArticles() {
-    return _db
-        .collection('articles')
-        .orderBy('timestamp', descending: true)
-        .snapshots();
-  }
+  // Catatan: deleteItem lama digantikan oleh discardItems / updateItemQuantity.
 }
